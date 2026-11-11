@@ -8,6 +8,31 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Policy format `convergence.policy/1` (YAML or JSON): `filesystem` (read, write, execute
+  with `${HOME}`, `${CWD}`, `${SCRATCH}`, and optional paths), `network` (TCP and UDP ports
+  per direction, unix sockets), `syscalls` (deny list or allow list on top of a built-in deny
+  list), `resources` (wall clock and rlimits), and `environment` (empty unless passed or
+  set). Strict validation: unknown keys, coercion, duplicate YAML keys, anchors, aliases, and
+  non-JSON values are errors. JSON Schema in `schemas/policy-v1.json`.
+- `convergence validate`: schema and host checks (paths exist, symlink targets, syscall names
+  against libseccomp), plus warnings for risky grants: the whole filesystem, home and
+  credential directories, `/proc`, `/sys`, `/dev`, system directories, `any` ports,
+  `unix_sockets: allow`, and secret-looking environment variables.
+- `convergence explain --policy`: the status of every rule on this kernel (`enforced`,
+  `enforced-with-caveat`, `partial`, `unenforceable`, `skipped`), using `doctor`'s live
+  probes, or a hypothetical ABI with `--assume-abi`. Exits 3 when a rule is not fully
+  enforceable, which `run` will refuse without `--allow-degraded`. Baseline gaps are reported
+  on every kernel: signal scoping before ABI 6, and metadata operations (stat, chmod, chown,
+  setxattr, utime) that Landlock never controls.
+- The built-in syscall deny list and argument rules as data (`policy/baseline.py`),
+  documented in `docs/policy.md` and checked against it by a test.
+- `schemas/doctor-v1.json`, generated with the policy schema by `python -m convergence.schemas`;
+  a test fails if either drifts.
+- `docs/policy.md`, ADR 0004, and example policies in `examples/policies/`.
+- Doctor evidence from every CI kernel (`docs/evidence/doctor/ci-*.json`), and the "Kernels
+  tested" table in `docs/landlock-abi.md` filled from it.
+- Dependencies: pydantic and PyYAML, resolved with a 14-day release cooldown
+  (`exclude-newer = "14 days"`).
 - `convergence doctor` (text and `--json`, schema `convergence.doctor/1`): reports the
   kernel, LSMs, Landlock ABI and errata, libseccomp, strace, and the calling process's
   privileges and seccomp state. It proves each feature with a live probe in a throwaway

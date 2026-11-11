@@ -75,13 +75,18 @@ for information only.
 
 ## Kernels tested
 
-| Environment | Kernel | ABI | Errata fixed | Evidence |
-|---|---|---:|---|---|
-| Lima VM, Ubuntu 24.04.4 (stock GA kernel), aarch64 | 6.8.0-134-generic | 4 | 1 (3 and 4 not fixed) | [`evidence/doctor/lima-ubuntu-24.04-ga-aarch64.json`](evidence/doctor/lima-ubuntu-24.04-ga-aarch64.json) |
-| GitHub `ubuntu-latest` (Ubuntu 26.04.1), x86_64 | 7.0.0-1019-azure | 8 | from the CI artifact | CI artifact `doctor-ubuntu-latest-*` |
-| GitHub `ubuntu-24.04-arm` (Ubuntu 24.04.5), aarch64 | 7.0.0-1017-azure | 8 | from the CI artifact | CI artifact `doctor-ubuntu-24.04-arm-*` |
-| GitHub `ubuntu-24.04`, x86_64 | from the CI artifact | — | — | CI artifact `doctor-ubuntu-24.04-py*` |
-| Nested QEMU/KVM VM in CI, Ubuntu 24.04 GA image, x86_64 | from the CI artifact | — | — | CI artifact `doctor-ubuntu-24.04-ga-kernel-nested-x86_64` |
+Each row is a `convergence doctor --json` report produced on that kernel. Those reports are
+the evidence; this table summarises them.
 
-The CI rows are filled from the uploaded `doctor.json` artifacts after each push. The two
-runner kernel versions shown were read from the Phase 0 CI logs.
+| Environment | Kernel | ABI | Live probes | Errata fixed / applicable but not fixed | Evidence |
+|---|---|---:|---|---|---|
+| Lima VM, Ubuntu 24.04.4 stock GA kernel, aarch64 | 6.8.0-134-generic | 4 | 8 verified; `ioctl_dev` and both scopes unavailable (need ABI 5 and 6) | 1 / 3, 4 | [lima-ubuntu-24.04-ga-aarch64](evidence/doctor/lima-ubuntu-24.04-ga-aarch64.json) |
+| CI nested QEMU/KVM VM, Ubuntu 24.04.4 stock GA kernel, x86_64 | 6.8.0-134-generic | 4 | same as above | 1 / 3, 4 | [ci-ubuntu-24.04-ga-kernel-nested-x86_64](evidence/doctor/ci-ubuntu-24.04-ga-kernel-nested-x86_64.json) |
+| CI `ubuntu-24.04` runner (Ubuntu 24.04.5), x86_64 | 7.0.0-1017-azure | 8 | all 11 verified | 1, 2, 3 / 4 | [ci-ubuntu-24.04](evidence/doctor/ci-ubuntu-24.04.json) |
+| CI `ubuntu-24.04-arm` runner (Ubuntu 24.04.5), aarch64 | 7.0.0-1017-azure | 8 | all 11 verified | 1, 2, 3 / 4 | [ci-ubuntu-24.04-arm](evidence/doctor/ci-ubuntu-24.04-arm.json) |
+| CI `ubuntu-latest` runner (Ubuntu 26.04.1), x86_64 | 7.0.0-1019-azure | 8 | all 11 verified | 1, 2, 3, 4 / none | [ci-ubuntu-latest](evidence/doctor/ci-ubuntu-latest.json) |
+
+The CI reports come from run
+[43023705617](https://github.com/vignesh-chaturvedi/convergence/actions/runs/43023705617)
+(commit `2d5ad24`, Python 3.12 jobs; the Python 3.13 jobs reported the same results).
+No tested kernel offers ABI 9 or later, so those features remain `abi-only`.

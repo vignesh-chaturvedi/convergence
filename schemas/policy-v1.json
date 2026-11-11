@@ -1,0 +1,389 @@
+{
+  "$defs": {
+    "Environment": {
+      "additionalProperties": false,
+      "properties": {
+        "pass": {
+          "default": [],
+          "description": "Names of variables copied from the caller's environment, if set.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Pass",
+          "type": "array"
+        },
+        "set": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Variables set to fixed values.",
+          "title": "Set",
+          "type": "object"
+        }
+      },
+      "title": "Environment",
+      "type": "object"
+    },
+    "Filesystem": {
+      "additionalProperties": false,
+      "properties": {
+        "execute": {
+          "default": [],
+          "description": "Files (or directories of files) that may be executed. Implies read.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/PathRule"
+              }
+            ],
+            "description": "An absolute path, or {path, optional}."
+          },
+          "title": "Execute",
+          "type": "array"
+        },
+        "read": {
+          "default": [],
+          "description": "Paths that may be read: files exactly, directories recursively.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/PathRule"
+              }
+            ],
+            "description": "An absolute path, or {path, optional}."
+          },
+          "title": "Read",
+          "type": "array"
+        },
+        "write": {
+          "default": [],
+          "description": "Paths that may be read and modified. On a directory this includes creating, removing, and renaming entries beneath it.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/PathRule"
+              }
+            ],
+            "description": "An absolute path, or {path, optional}."
+          },
+          "title": "Write",
+          "type": "array"
+        }
+      },
+      "title": "Filesystem",
+      "type": "object"
+    },
+    "Network": {
+      "additionalProperties": false,
+      "properties": {
+        "tcp_bind": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "const": "any",
+              "type": "string"
+            }
+          ],
+          "default": [],
+          "description": "Local TCP ports that may be bound (0 = an ephemeral port), or 'any'.",
+          "title": "Tcp Bind"
+        },
+        "tcp_connect": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "const": "any",
+              "type": "string"
+            }
+          ],
+          "default": [],
+          "description": "Remote TCP ports that may be connected to, on any host, or 'any'.",
+          "title": "Tcp Connect"
+        },
+        "udp_bind": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "const": "any",
+              "type": "string"
+            }
+          ],
+          "default": [],
+          "description": "Local UDP ports that may be bound (0 = an ephemeral port), or 'any'.",
+          "title": "Udp Bind"
+        },
+        "udp_send": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 65535,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "const": "any",
+              "type": "string"
+            }
+          ],
+          "default": [],
+          "description": "Remote UDP ports that may be sent to, on any host, or 'any'.",
+          "title": "Udp Send"
+        },
+        "unix_sockets": {
+          "default": "deny",
+          "description": "'deny': no connections to unix sockets outside the sandbox. 'allow': unix sockets are not restricted (this can reach host services).",
+          "enum": [
+            "deny",
+            "allow"
+          ],
+          "title": "Unix Sockets",
+          "type": "string"
+        }
+      },
+      "title": "Network",
+      "type": "object"
+    },
+    "PathRule": {
+      "additionalProperties": false,
+      "description": "A path with options. A bare string in a policy means ``{path: ..., optional: false}``.",
+      "properties": {
+        "optional": {
+          "default": false,
+          "description": "If true, a path that does not exist is skipped instead of being an error.",
+          "title": "Optional",
+          "type": "boolean"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "PathRule",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "address_space_mb": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "RLIMIT_AS per process. Off by default: runtimes such as V8 and Go reserve large virtual ranges and fail under it.",
+          "title": "Address Space Mb"
+        },
+        "cpu_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 60,
+          "description": "RLIMIT_CPU per process.",
+          "title": "Cpu Seconds"
+        },
+        "max_file_size_mb": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1024,
+          "description": "RLIMIT_FSIZE.",
+          "title": "Max File Size Mb"
+        },
+        "max_open_files": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 1024,
+          "description": "RLIMIT_NOFILE.",
+          "title": "Max Open Files"
+        },
+        "max_processes": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 64,
+          "description": "Processes the sandbox may add (RLIMIT_NPROC, which the kernel counts per user, not per sandbox).",
+          "title": "Max Processes"
+        },
+        "memory_mb": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 2048,
+          "description": "RLIMIT_DATA per process: private writable memory (heap, anonymous mappings). Not a cgroup memory limit.",
+          "title": "Memory Mb"
+        },
+        "wall_clock_seconds": {
+          "default": 60,
+          "description": "Kill the whole sandbox after this many seconds.",
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "title": "Wall Clock Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "Resources",
+      "type": "object"
+    },
+    "Syscalls": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "default": [],
+          "description": "allow-list mode only: every syscall the tool may make.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Allow",
+          "type": "array"
+        },
+        "deny": {
+          "default": [],
+          "description": "Extra syscalls to deny.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Deny",
+          "type": "array"
+        },
+        "mode": {
+          "default": "deny-list",
+          "description": "'deny-list': everything is allowed except Convergence's built-in deny list and 'deny'. 'allow-list': only 'allow' is permitted, minus the built-in deny list.",
+          "enum": [
+            "deny-list",
+            "allow-list"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "Syscalls",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/vignesh-chaturvedi/convergence/blob/main/schemas/policy-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A Convergence policy. Everything not granted is denied. See docs/policy.md.",
+  "properties": {
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "environment": {
+      "$ref": "#/$defs/Environment"
+    },
+    "filesystem": {
+      "$ref": "#/$defs/Filesystem"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "network": {
+      "$ref": "#/$defs/Network"
+    },
+    "resources": {
+      "$ref": "#/$defs/Resources"
+    },
+    "syscalls": {
+      "$ref": "#/$defs/Syscalls"
+    },
+    "version": {
+      "description": "Policy format version. Only 1 exists.",
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "convergence.policy/1",
+  "type": "object"
+}

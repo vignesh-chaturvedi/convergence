@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 1 complete (local), Phase 2 next · **Last updated:** 2026-11-11
+**Status:** Phase 2 complete (local), Phase 3 next · **Last updated:** 2026-11-11
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -338,8 +338,19 @@ environment:
 **Tests:** schema round-trips and rejections. The enforceability logic is tested against
 every ABI level as pure logic, and also against the live kernel.
 
-**Exit gate:** `validate` and `explain` are correct on the GA and HWE VMs, and the schema is
-committed.
+**Exit gate:** `validate` and `explain` are correct on the GA-kernel VM and on the CI
+kernels, and the schema is committed.
+
+**As built (Phase 2):**
+- Dependencies are pydantic and PyYAML, resolved with a 14-day release cooldown
+  (`exclude-newer = "14 days"`).
+- `explain` gained `--assume-abi N` to assess against a hypothetical kernel.
+- Two findings that shape later phases:
+  - Landlock does not control `stat`, `chmod`, `chown`, `setxattr`, or `utime` on any ABI,
+    so `explain` reports a metadata gap on every kernel. Phase 4 decides whether seccomp
+    should mitigate it, using benign-control data.
+  - On ABI 4, allowing DNS over UDP makes a policy `unenforceable`, because UDP cannot be
+    limited to port 53 before ABI 10.
 
 ### Phase 3 — Threat model, escape matrix, and benign controls, written before the runtime (Milestone 3)
 
@@ -558,6 +569,12 @@ from the results.
    remove it. Option: you or another contributor write or review the holdout cases.
 8. **Host RAM is 8 GB**, so only one VM runs at a time.
 9. **PyPI publication needs your action** to set up the trusted publisher.
+10. **Metadata operations outside the grants** (`chmod`, `chown`, `setxattr`, `utime`,
+    `stat`) are not controlled by Landlock on any ABI. Mitigating them with seccomp may break
+    common tools (`touch`, `tar`, `pip`). Decide in Phase 4, with the benign controls as
+    evidence.
+11. **UDP on stock 24.04.** DNS needs UDP, and ABI 4 cannot limit it to port 53. Networked
+    policies on stock 24.04 will need `--allow-degraded`, or DNS over TCP only.
 
 ## 10. Status
 
@@ -565,8 +582,8 @@ from the results.
 |---|---|---|---|---|
 | — | Plan (this file) | done | `f117da9` | yes |
 | 0 | Bootstrap | done | `fdd63f8` | yes |
-| 1 | `doctor` and capability probe | done | see git log | |
-| 2 | Policy schema, `validate`, `explain` | not started | | |
+| 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
+| 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | not started | | |
 | 4 | Runtime enforcement and holdout | not started | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |

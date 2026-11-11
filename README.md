@@ -12,7 +12,8 @@ Convergence contains what it does.
 ## Status: pre-alpha, nothing is enforced yet
 
 This repository is being built in phases; see [PLAN.md](PLAN.md). The current code can
-report what a kernel supports (`convergence doctor`), but **it does not sandbox anything.** Do
+report what a kernel supports (`convergence doctor`) and check policies (`validate`,
+`explain`), but **it does not sandbox anything.** Do
 not use it to run untrusted code.
 
 This README will only claim what the tests and benchmarks in this repository support. The
@@ -33,10 +34,27 @@ convergence doctor --json   # schema convergence.doctor/1
 On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), `doctor` verifies filesystem access
 control, cross-directory renames, truncation, TCP ports, seccomp argument filtering,
 `no_new_privs`, the file-size resource limit, and ptrace tracing through strace. It also
-reports what that kernel *cannot* do. For
-example, signal and abstract-unix-socket scoping need Landlock ABI 6
+reports what that kernel *cannot* do. For example, signal and abstract-unix-socket scoping need Landlock ABI 6
 ([sample output](docs/evidence/doctor/lima-ubuntu-24.04-ga-aarch64.txt),
 [ABI reference](docs/landlock-abi.md)).
+
+## Policies: `validate` and `explain`
+
+A policy lists what a tool may do. Everything else is denied
+([format reference](docs/policy.md), [examples](examples/policies/)).
+
+```bash
+convergence validate policy.yaml          # schema, paths, syscall names, risky grants
+convergence explain --policy policy.yaml  # how each rule would be enforced on this kernel
+```
+
+`explain` reports every rule as `enforced`, `enforced-with-caveat`, `partial`, or
+`unenforceable` on the running kernel. Convergence will refuse to run a policy with a
+`partial` or `unenforceable` rule unless told explicitly. For example, on stock Ubuntu 24.04
+(Landlock ABI 4), limiting UDP to port 53 is `unenforceable`: that needs ABI 10.
+
+Landlock filters network access by **port, not host**. Allowlisting hosts or IP addresses is
+out of scope for v1.
 
 ## Development
 

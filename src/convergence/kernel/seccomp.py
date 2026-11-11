@@ -84,6 +84,21 @@ class _SockFprog(ctypes.Structure):
 
 BPF_INSTRUCTION_SIZE = 8  # struct sock_filter: __u16 code; __u8 jt; __u8 jf; __u32 k
 
+_NR_SCMP_ERROR = -1  # __NR_SCMP_ERROR: libseccomp does not know the name
+
+
+class SyscallKind(enum.StrEnum):
+    NATIVE = "native"  # exists on this architecture
+    OTHER_ARCH = "other-architecture"  # libseccomp knows it, but not on this architecture
+    UNKNOWN = "unknown"  # libseccomp does not know the name (too new, or a typo)
+
+
+@dataclass(frozen=True, slots=True)
+class SyscallLookup:
+    name: str
+    number: int | None
+    kind: SyscallKind
+
 
 class SeccompUnavailable(Exception):
     """libseccomp could not be loaded, or the kernel lacks seccomp filtering."""
@@ -135,12 +150,26 @@ class Library:
             api_level=int(self._lib.seccomp_api_get()),
         )
 
-    def resolve_syscall(self, name: str) -> int:
-        """The native syscall number for ``name``. Raises ``KeyError`` if unknown."""
+    def lookup(self, name: str) -> SyscallLookup:
+        """Classify ``name``: native here, a syscall of another architecture, or unknown.
+
+        libseccomp returns -1 for names it does not know at all, and negative "pseudo"
+        numbers for syscalls that exist only on other architectures. A rule for a pseudo
+        syscall is accepted and has no effect on this architecture.
+        """
         number = int(self._lib.seccomp_syscall_resolve_name(name.encode()))
+        if number == _NR_SCMP_ERROR:
+            return SyscallLookup(name, None, SyscallKind.UNKNOWN)
         if number < 0:
+            return SyscallLookup(name, number, SyscallKind.OTHER_ARCH)
+        return SyscallLookup(name, number, SyscallKind.NATIVE)
+
+    def resolve_syscall(self, name: str) -> int:
+        """The number libseccomp uses for ``name``. Raises ``KeyError`` if it is unknown."""
+        found = self.lookup(name)
+        if found.number is None:
             raise KeyError(f"libseccomp does not know the syscall {name!r}")
-        return number
+        return found.number
 
     def new_filter(self, default_action: int) -> Filter:
         return Filter(self, default_action)

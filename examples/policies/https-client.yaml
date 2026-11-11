@@ -1,0 +1,33 @@
+# A tool that calls an HTTPS API and resolves host names.
+# Landlock filters ports, not hosts: "443" means port 443 on any host. Host allowlisting is
+# out of scope for v1.
+version: 1
+name: https-client
+description: Python HTTPS client with DNS; shows which network rules a kernel can enforce.
+
+filesystem:
+  read:
+    - /usr
+    - /etc/ld.so.cache
+    - /etc/ssl/certs          # CA certificates
+    - /etc/resolv.conf        # DNS configuration
+    - /etc/hosts
+    - /etc/nsswitch.conf
+    - ${CWD}
+  write:
+    - ${SCRATCH}
+    - /dev/null
+  execute:
+    - /usr/bin/python3
+    - {path: /usr/lib/ld-linux-aarch64.so.1, optional: true}
+    - {path: /usr/lib64/ld-linux-x86-64.so.2, optional: true}
+
+network:
+  tcp_connect: [443, 53]      # HTTPS, and DNS over TCP
+  udp_send: [53]              # DNS over UDP: limiting UDP by port needs Landlock ABI 10
+
+environment:
+  pass: [LANG]
+  set:
+    PATH: /usr/bin:/bin
+    HOME: ${SCRATCH}

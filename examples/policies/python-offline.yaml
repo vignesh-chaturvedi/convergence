@@ -1,0 +1,35 @@
+# Run a Python script that reads the current directory and writes only to a per-run
+# scratch directory. No network, no unix sockets, nothing else on the filesystem.
+version: 1
+name: python-offline
+description: Python script reading ${CWD}, writing to ${SCRATCH}, no network.
+
+filesystem:
+  read:
+    - /usr                    # interpreter, standard library, shared libraries
+    - /etc/ld.so.cache        # dynamic linker cache
+    - ${CWD}                  # the project the script works on
+    # No /dev/urandom: Python uses the getrandom() syscall. Read access to a device would
+    # be only partially enforceable before Landlock ABI 5 (ioctl cannot be denied).
+  write:
+    - ${SCRATCH}              # fresh for each run, removed afterwards
+    - /dev/null
+  execute:
+    - /usr/bin/python3
+    # The dynamic loader: one of these exists, depending on the architecture.
+    - {path: /usr/lib/ld-linux-aarch64.so.1, optional: true}
+    - {path: /usr/lib64/ld-linux-x86-64.so.2, optional: true}
+
+network: {}                   # nothing: no TCP, no UDP, no unix sockets
+
+resources:
+  wall_clock_seconds: 60
+  cpu_seconds: 30
+  memory_mb: 1024
+  max_processes: 16
+
+environment:
+  set:
+    PATH: /usr/bin:/bin
+    HOME: ${SCRATCH}
+    LANG: C.UTF-8

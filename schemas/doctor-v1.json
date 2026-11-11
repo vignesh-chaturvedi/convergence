@@ -1,0 +1,496 @@
+{
+  "$defs": {
+    "HostFacts": {
+      "properties": {
+        "apparmor_restrict_unprivileged_userns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Apparmor Restrict Unprivileged Userns"
+        },
+        "container_hints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Container Hints",
+          "type": "array"
+        },
+        "effective_capabilities": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Effective Capabilities"
+        },
+        "euid": {
+          "title": "Euid",
+          "type": "integer"
+        },
+        "gid": {
+          "title": "Gid",
+          "type": "integer"
+        },
+        "kernel_release": {
+          "title": "Kernel Release",
+          "type": "string"
+        },
+        "kernel_version": {
+          "title": "Kernel Version",
+          "type": "string"
+        },
+        "lsm": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lsm"
+        },
+        "machine": {
+          "title": "Machine",
+          "type": "string"
+        },
+        "no_new_privs": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "No New Privs"
+        },
+        "os_pretty_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Os Pretty Name"
+        },
+        "platform": {
+          "title": "Platform",
+          "type": "string"
+        },
+        "python": {
+          "title": "Python",
+          "type": "string"
+        },
+        "seccomp_filters": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Seccomp Filters"
+        },
+        "seccomp_mode": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Seccomp Mode"
+        },
+        "strace_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Strace Path"
+        },
+        "strace_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Strace Version"
+        },
+        "system": {
+          "title": "System",
+          "type": "string"
+        },
+        "uid": {
+          "title": "Uid",
+          "type": "integer"
+        },
+        "unprivileged_userns_clone": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unprivileged Userns Clone"
+        },
+        "yama_ptrace_scope": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Yama Ptrace Scope"
+        }
+      },
+      "required": [
+        "platform",
+        "system",
+        "kernel_release",
+        "kernel_version",
+        "machine",
+        "os_pretty_name",
+        "lsm",
+        "uid",
+        "euid",
+        "gid",
+        "effective_capabilities",
+        "seccomp_mode",
+        "seccomp_filters",
+        "no_new_privs",
+        "yama_ptrace_scope",
+        "unprivileged_userns_clone",
+        "apparmor_restrict_unprivileged_userns",
+        "python",
+        "strace_path",
+        "strace_version"
+      ],
+      "title": "HostFacts",
+      "type": "object"
+    },
+    "LandlockInfo": {
+      "properties": {
+        "abi": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Abi"
+        },
+        "errata_fixed": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Errata Fixed",
+          "type": "array"
+        },
+        "errata_mask": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Errata Mask"
+        },
+        "errata_not_fixed": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Errata Not Fixed",
+          "type": "array"
+        },
+        "known_max_abi": {
+          "title": "Known Max Abi",
+          "type": "integer"
+        },
+        "unavailable_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unavailable Reason"
+        }
+      },
+      "required": [
+        "abi",
+        "unavailable_reason",
+        "known_max_abi",
+        "errata_mask",
+        "errata_fixed",
+        "errata_not_fixed"
+      ],
+      "title": "LandlockInfo",
+      "type": "object"
+    },
+    "ProbeResult": {
+      "properties": {
+        "expected": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Expected",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "observed": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Observed",
+          "type": "object"
+        },
+        "status": {
+          "$ref": "#/$defs/ProbeStatus"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "summary"
+      ],
+      "title": "ProbeResult",
+      "type": "object"
+    },
+    "ProbeStatus": {
+      "enum": [
+        "verified",
+        "unavailable",
+        "failed",
+        "error"
+      ],
+      "title": "ProbeStatus",
+      "type": "string"
+    },
+    "Protection": {
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mechanism": {
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "minimum": {
+          "title": "Minimum",
+          "type": "boolean"
+        },
+        "requirement": {
+          "title": "Requirement",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ProtectionStatus"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "mechanism",
+        "status",
+        "requirement",
+        "detail",
+        "minimum"
+      ],
+      "title": "Protection",
+      "type": "object"
+    },
+    "ProtectionStatus": {
+      "enum": [
+        "verified",
+        "abi-only",
+        "missing",
+        "failed",
+        "unknown"
+      ],
+      "title": "ProtectionStatus",
+      "type": "string"
+    },
+    "SeccompInfo": {
+      "properties": {
+        "api_level": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Level"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "library_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Library Path"
+        },
+        "library_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Library Version"
+        }
+      },
+      "required": [
+        "library_path",
+        "library_version",
+        "api_level",
+        "error"
+      ],
+      "title": "SeccompInfo",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/vignesh-chaturvedi/convergence/blob/main/schemas/doctor-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Output of `convergence doctor --json`.",
+  "properties": {
+    "convergence_version": {
+      "title": "Convergence Version",
+      "type": "string"
+    },
+    "enforcement_implemented": {
+      "title": "Enforcement Implemented",
+      "type": "boolean"
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "host": {
+      "$ref": "#/$defs/HostFacts"
+    },
+    "landlock": {
+      "$ref": "#/$defs/LandlockInfo"
+    },
+    "minimum_met": {
+      "title": "Minimum Met",
+      "type": "boolean"
+    },
+    "minimum_missing": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Minimum Missing",
+      "type": "array"
+    },
+    "probes": {
+      "items": {
+        "$ref": "#/$defs/ProbeResult"
+      },
+      "title": "Probes",
+      "type": "array"
+    },
+    "protections": {
+      "items": {
+        "$ref": "#/$defs/Protection"
+      },
+      "title": "Protections",
+      "type": "array"
+    },
+    "schema": {
+      "title": "Schema",
+      "type": "string"
+    },
+    "seccomp": {
+      "$ref": "#/$defs/SeccompInfo"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "convergence_version",
+    "generated_at",
+    "enforcement_implemented",
+    "host",
+    "landlock",
+    "seccomp",
+    "probes",
+    "protections",
+    "minimum_met",
+    "minimum_missing"
+  ],
+  "title": "convergence.doctor/1",
+  "type": "object"
+}

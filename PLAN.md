@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 2 complete (local), Phase 3 next · **Last updated:** 2026-11-11
+**Status:** Phase 3 design saved; implementation handed off to another author · **Last updated:** 2026-11-11
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -402,6 +402,14 @@ kernels, and the schema is committed.
   results and the "initially failing" baseline against the unimplemented runtime are
   committed.
 - ADR-0005. The CI escape job is added, allowed to fail until Phase 4.
+
+**Design handoff (Phase 3):** the threat model and the escape-matrix design are written
+and saved — [`THREAT_MODEL.md`](THREAT_MODEL.md), [ADR 0005](docs/adr/0005-escape-matrix-design.md),
+and the implementation spec [`escape/README.md`](escape/README.md). The case files,
+oracles, runner, controls, sealed holdout, and the committed unconfined-validity and
+initially-red baselines are to be built against that spec by the next author. The
+holdout being authored here and the runtime being written afterwards by someone else
+makes the two more independent than one author doing both (ADR 0005).
 
 **Exit gate:** the case counts are met, 100% of attacks are proven to work unconfined, and
 the baseline report is committed.

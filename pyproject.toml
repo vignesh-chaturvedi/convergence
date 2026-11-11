@@ -1,0 +1,88 @@
+[project]
+name = "convergence-sandbox"
+version = "0.1.0.dev0"
+description = "Least-privilege sandboxing for AI agent tools on Linux: Landlock and seccomp policies generated from observed behaviour."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Vignesh Chaturvedi" },
+]
+keywords = ["sandbox", "landlock", "seccomp", "mcp", "agent", "security", "least-privilege"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/vignesh-chaturvedi/convergence"
+Repository = "https://github.com/vignesh-chaturvedi/convergence"
+Changelog = "https://github.com/vignesh-chaturvedi/convergence/blob/main/CHANGELOG.md"
+
+[project.scripts]
+convergence = "convergence.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18",
+    "pytest>=8.4",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.13.6"
+
+[tool.uv.build-backend]
+module-name = "convergence"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "SIM",  # simplify
+    "S",    # bandit
+    "PT",   # pytest style
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, and they run the CLI as a subprocess on purpose.
+"tests/**" = ["S101", "S603"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+minversion = "8.4"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+    "kernel: needs a real Linux kernel with the feature under test (never mocked)",
+    "escape: escape-matrix development set",
+    "holdout: escape-matrix holdout set (one-time runs only)",
+    "slow: takes more than a few seconds",
+]

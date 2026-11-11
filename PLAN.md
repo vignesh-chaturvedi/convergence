@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** plan written, Phase 0 not started · **Last updated:** 2026-11-11
+**Status:** Phase 0 complete (local), Phase 1 next · **Last updated:** 2026-11-11
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -554,8 +554,8 @@ from the results.
 
 | Phase | Scope | Status | Commit | Pushed |
 |---|---|---|---|---|
-| — | Plan (this file) | done | — | — |
-| 0 | Bootstrap | not started | | |
+| — | Plan (this file) | done | `f117da9` | yes |
+| 0 | Bootstrap | done | see git log | |
 | 1 | `doctor` and capability probe | not started | | |
 | 2 | Policy schema, `validate`, `explain` | not started | | |
 | 3 | Threat model, escape matrix, controls | not started | | |

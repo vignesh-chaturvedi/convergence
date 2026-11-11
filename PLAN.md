@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 0 complete (local), Phase 1 next · **Last updated:** 2026-11-11
+**Status:** Phase 1 complete (local), Phase 2 next · **Last updated:** 2026-11-11
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -54,11 +54,15 @@ This file is the working plan. It is updated at the end of every phase.
 | Yama | `ptrace_scope=1` | `sysctl` |
 | HWE kernel | `linux-generic-hwe-24.04` candidate `7.0.0-42` (not installed) | `apt-cache policy` |
 | Not installed yet | uv, gcc, bubblewrap, docker.io | `command -v` |
+| CI `ubuntu-latest` | **Ubuntu 26.04.1**, kernel `7.0.0-1019-azure` x86_64, Landlock ABI 8 | Phase 0 CI log |
+| CI `ubuntu-24.04-arm` | Ubuntu 24.04.5, kernel `7.0.0-1017-azure` aarch64, Landlock ABI 8 | Phase 0 CI log |
 
 **What this means:** the stock 24.04 kernel (ABI 4) is the primary target, because that is
-what "a fresh Ubuntu 24.04 machine" gets. A second VM with the HWE kernel is used to exercise
-newer ABI features. The CI kernels (`ubuntu-latest` x86_64 and `ubuntu-24.04-arm`) are not
-known yet; Phase 1 runs `doctor` on them before anything depends on them.
+what "a fresh Ubuntu 24.04 machine" gets. The CI runners use Azure 7.0 kernels with ABI 8,
+which exercise the newer ABI features. `ubuntu-latest` now means Ubuntu 26.04, not 24.04
+(GitHub began moving the label on 2026-10-19). No GitHub-hosted runner has the stock 24.04
+kernel, so from Phase 1 on CI also boots the pinned 24.04 cloud image in a nested VM
+(ADR 0003).
 
 ---
 
@@ -99,7 +103,7 @@ known yet; Phase 1 runs `doctor` on them before anything depends on them.
   Prior art section must say so plainly and describe what Convergence adds: stock-kernel
   support, kernel-only enforcement, a rationale for every rule, audit2allow-style denial
   explanations, the Divergence importer, and a published escape matrix with a holdout.
-- **Proposed decision (ADR-0002):** do not build on sandlock. Cite it as prior art.
+- **Decision (ADR-0002, accepted in Phase 1):** do not build on sandlock. Cite it as prior art.
 
 ### 3.3 `landlock` on PyPI (Edward-Knight/landlock, MIT)
 
@@ -110,7 +114,7 @@ known yet; Phase 1 runs `doctor` on them before anything depends on them.
 
 - libseccomp is installed by default on Ubuntu 24.04 because systemd depends on it. The
   official Python bindings are not on PyPI. `pyseccomp` (ctypes) was last released in 2021.
-- **Proposed decision (ADR-0002):** a thin ctypes binding to libseccomp's stable C API
+- **Decision (ADR-0002, accepted in Phase 1):** a thin ctypes binding to libseccomp's stable C API
   (`seccomp_init`, `seccomp_rule_add`, `seccomp_arch_*`, `seccomp_export_bpf`). The filter
   is built by the maintained library, so architecture checks (x32, 32-bit compat) are not
   hand-written. Landlock gets its own small ctypes binding over its three syscalls, because
@@ -220,9 +224,11 @@ README.md  THREAT_MODEL.md  CHANGELOG.md  PLAN.md  LICENSE (Apache-2.0)
   `uv run …` in the guest with `UV_PROJECT_ENVIRONMENT=$HOME/.venvs/convergence`, so the
   virtualenv lives on the guest's ext4 disk, not on the virtiofs mount. Tests create their
   sandboxes under the guest's `/tmp`.
-- CI runs on GitHub Actions `ubuntu-latest` (x86_64) and `ubuntu-24.04-arm` (arm64): lint,
-  type check, unit tests, kernel tests, and, from Phase 4 on, the dev escape matrix. The
-  holdout job runs only on manual dispatch.
+- CI runs lint and type checks, then the tests on `ubuntu-latest` (x86_64, Ubuntu 26.04),
+  `ubuntu-24.04` (x86_64), and `ubuntu-24.04-arm` (arm64), for Python 3.12 and 3.13. A
+  separate job boots the stock Ubuntu 24.04 kernel in a nested QEMU/KVM VM and runs the
+  tests there. Each job uploads its `doctor --json` report. From Phase 4 on, the dev escape
+  matrix runs too. The holdout job runs only on manual dispatch.
 - Only one VM runs at a time, because the host has 8 GB of RAM.
 
 ---
@@ -270,13 +276,16 @@ the push, and then a CI check.
 - `convergence doctor`: a human-readable table and `--json` (`convergence.doctor/1`),
   including a "will / will not be enforced on this machine" section. It exits non-zero when
   the minimum enforcement set is unavailable.
-- Create a second VM, `convergence-hwe`, with the HWE kernel to exercise ABI ≥ 6 paths.
-- Record `doctor` output from the GA VM, the HWE VM, CI x86_64, and CI arm64 in
-  `docs/evidence/doctor/`.
+- ~~Create a second VM with the HWE kernel~~ — dropped (ADR 0003): the CI kernels already
+  have ABI 8. Instead, CI gains an explicit `ubuntu-24.04` job and a nested-VM job on the
+  stock 24.04 kernel.
+- Record `doctor` output in `docs/evidence/doctor/`: the GA VM now; the CI kernels from the
+  uploaded artifacts after the push.
 - ADR-0002 and ADR-0003.
+- The `doctor-v1` JSON Schema moves to Phase 2, where the schema tooling arrives.
 
-**Exit gate:** `doctor` runs on all four kernels and the outputs are committed. **If a CI
-kernel lacks Landlock or seccomp, stop and report it with evidence.**
+**Exit gate:** `doctor` runs on the GA VM and on every CI kernel, and the outputs are
+committed. **If a CI kernel lacks Landlock or seccomp, stop and report it with evidence.**
 
 ### Phase 2 — Policy schema, `validate`, and `explain` for policies (Milestone 2)
 
@@ -531,9 +540,9 @@ from the results.
 
 ## 9. Risks and open questions
 
-1. **CI kernels may lack Landlock, or differ from the VM.** Phase 1 checks this first. If a
-   CI kernel lacks it, enforcement tests cannot run there; this gets reported, and the VM
-   evidence stays authoritative.
+1. **CI kernels differ from the VM.** They have Landlock ABI 8 (checked in Phase 0), not the
+   stock 24.04 ABI 4. The nested-VM CI job covers ABI 4; if KVM is unavailable on the runner,
+   ABI 4 evidence comes from the local VM only and the README says so.
 2. **ABI 4 cannot scope signals or abstract unix sockets.** `AF_UNIX` `socket()` is denied
    by default as a mitigation. Signals to same-uid processes outside the sandbox cannot be
    blocked on ABI 4 without a PID namespace, so this is a documented limitation on stock
@@ -555,8 +564,8 @@ from the results.
 | Phase | Scope | Status | Commit | Pushed |
 |---|---|---|---|---|
 | — | Plan (this file) | done | `f117da9` | yes |
-| 0 | Bootstrap | done | see git log | |
-| 1 | `doctor` and capability probe | not started | | |
+| 0 | Bootstrap | done | `fdd63f8` | yes |
+| 1 | `doctor` and capability probe | done | see git log | |
 | 2 | Policy schema, `validate`, `explain` | not started | | |
 | 3 | Threat model, escape matrix, controls | not started | | |
 | 4 | Runtime enforcement and holdout | not started | | |

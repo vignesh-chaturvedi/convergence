@@ -11,12 +11,32 @@ Convergence contains what it does.
 
 ## Status: pre-alpha, nothing is enforced yet
 
-This repository is being built in phases; see [PLAN.md](PLAN.md). The current code is a
-project skeleton. **It does not sandbox anything.** Do not use it to run untrusted code.
+This repository is being built in phases; see [PLAN.md](PLAN.md). The current code can
+report what a kernel supports (`convergence doctor`), but **it does not sandbox anything.** Do
+not use it to run untrusted code.
 
 This README will only claim what the tests and benchmarks in this repository support. The
 sections on what is enforced, the escape matrix, and the benchmarks will be added as the
 phases that produce that evidence land.
+
+## What works today: `convergence doctor`
+
+`doctor` reports what the running kernel can enforce. It proves each feature by using it in
+a throwaway child process: for example, a child confined by Landlock must be denied a read
+outside its directory. A kernel version number alone is never taken as proof.
+
+```bash
+convergence doctor          # human-readable report
+convergence doctor --json   # schema convergence.doctor/1
+```
+
+On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), `doctor` verifies filesystem access
+control, cross-directory renames, truncation, TCP ports, seccomp argument filtering,
+`no_new_privs`, the file-size resource limit, and ptrace tracing through strace. It also
+reports what that kernel *cannot* do. For
+example, signal and abstract-unix-socket scoping need Landlock ABI 6
+([sample output](docs/evidence/doctor/lima-ubuntu-24.04-ga-aarch64.txt),
+[ABI reference](docs/landlock-abi.md)).
 
 ## Development
 

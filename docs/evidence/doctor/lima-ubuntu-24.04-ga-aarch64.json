@@ -1,0 +1,345 @@
+{
+  "schema": "convergence.doctor/1",
+  "convergence_version": "0.1.0.dev0",
+  "generated_at": "2026-11-11T12:45:45+00:00",
+  "enforcement_implemented": false,
+  "host": {
+    "platform": "linux",
+    "system": "Linux",
+    "kernel_release": "6.8.0-134-generic",
+    "kernel_version": "#134-Ubuntu SMP PREEMPT_DYNAMIC Fri Jun 26 18:28:11 UTC 2026",
+    "machine": "aarch64",
+    "os_pretty_name": "Ubuntu 24.04.4 LTS",
+    "lsm": [
+      "lockdown",
+      "capability",
+      "landlock",
+      "yama",
+      "apparmor"
+    ],
+    "uid": 501,
+    "euid": 501,
+    "gid": 1000,
+    "effective_capabilities": "0000000000000000",
+    "seccomp_mode": 0,
+    "seccomp_filters": 0,
+    "no_new_privs": false,
+    "yama_ptrace_scope": 1,
+    "unprivileged_userns_clone": 1,
+    "apparmor_restrict_unprivileged_userns": 1,
+    "python": "3.12.3",
+    "strace_path": "/usr/bin/strace",
+    "strace_version": "strace -- version 6.8",
+    "container_hints": []
+  },
+  "landlock": {
+    "abi": 4,
+    "unavailable_reason": null,
+    "known_max_abi": 12,
+    "errata_mask": 1,
+    "errata_fixed": [
+      1
+    ],
+    "errata_not_fixed": [
+      3,
+      4
+    ]
+  },
+  "seccomp": {
+    "library_path": "libseccomp.so.2",
+    "library_version": "2.5.5",
+    "api_level": 6,
+    "error": null
+  },
+  "probes": [
+    {
+      "name": "landlock.fs",
+      "status": "verified",
+      "summary": "confined child could use its directory and was denied outside it (EACCES)",
+      "expected": {
+        "read_inside": "ok",
+        "create_inside": "ok",
+        "read_outside": "EACCES",
+        "create_outside": "EACCES",
+        "list_outside": "EACCES",
+        "no_file_created_outside": "ok"
+      },
+      "observed": {
+        "read_inside": "ok",
+        "create_inside": "ok",
+        "read_outside": "EACCES",
+        "create_outside": "EACCES",
+        "list_outside": "EACCES",
+        "no_file_created_outside": "ok"
+      }
+    },
+    {
+      "name": "landlock.refer",
+      "status": "verified",
+      "summary": "cross-directory rename needed REFER (EXDEV without it)",
+      "expected": {
+        "rename_without_refer": "EXDEV",
+        "rename_with_refer": "ok",
+        "source_file_kept": "ok"
+      },
+      "observed": {
+        "rename_without_refer": "EXDEV",
+        "rename_with_refer": "ok",
+        "source_file_kept": "ok"
+      }
+    },
+    {
+      "name": "landlock.truncate",
+      "status": "verified",
+      "summary": "truncation needed TRUNCATE (EACCES without it)",
+      "expected": {
+        "truncate_without_right": "EACCES",
+        "open_trunc_without_right": "EACCES",
+        "truncate_with_right": "ok",
+        "protected_file_intact": "ok"
+      },
+      "observed": {
+        "truncate_without_right": "EACCES",
+        "open_trunc_without_right": "EACCES",
+        "truncate_with_right": "ok",
+        "protected_file_intact": "ok"
+      }
+    },
+    {
+      "name": "landlock.net_tcp",
+      "status": "verified",
+      "summary": "TCP connect and bind were limited to the allowed ports (EACCES otherwise)",
+      "expected": {
+        "connect_allowed_port": "ok",
+        "connect_other_port": "EACCES",
+        "bind_allowed_port": "ok",
+        "bind_other_port": "EACCES",
+        "denied_listener_saw_no_connection": "ok"
+      },
+      "observed": {
+        "connect_allowed_port": "ok",
+        "connect_other_port": "EACCES",
+        "bind_allowed_port": "ok",
+        "bind_other_port": "EACCES",
+        "denied_listener_saw_no_connection": "ok"
+      }
+    },
+    {
+      "name": "landlock.ioctl_dev",
+      "status": "unavailable",
+      "summary": "needs Landlock ABI 5; this kernel has ABI 4",
+      "expected": {},
+      "observed": {}
+    },
+    {
+      "name": "landlock.scope_signal",
+      "status": "unavailable",
+      "summary": "needs Landlock ABI 6; this kernel has ABI 4",
+      "expected": {},
+      "observed": {}
+    },
+    {
+      "name": "landlock.scope_abstract_unix",
+      "status": "unavailable",
+      "summary": "needs Landlock ABI 6; this kernel has ABI 4",
+      "expected": {},
+      "observed": {}
+    },
+    {
+      "name": "seccomp.filter",
+      "status": "verified",
+      "summary": "a filter denied socket(AF_INET) by argument (EPERM) and allowed socket(AF_UNIX)",
+      "expected": {
+        "denied_argument_value": "EPERM",
+        "other_argument_value": "ok",
+        "seccomp_mode": "2"
+      },
+      "observed": {
+        "denied_argument_value": "EPERM",
+        "other_argument_value": "ok",
+        "seccomp_mode": "2"
+      }
+    },
+    {
+      "name": "no_new_privs",
+      "status": "verified",
+      "summary": "PR_SET_NO_NEW_PRIVS took effect",
+      "expected": {
+        "prctl_reports_set": "True",
+        "status_reports_set": "1"
+      },
+      "observed": {
+        "prctl_reports_set": "True",
+        "status_reports_set": "1"
+      }
+    },
+    {
+      "name": "rlimits",
+      "status": "verified",
+      "summary": "RLIMIT_FSIZE stopped a write at the limit (EFBIG)",
+      "expected": {
+        "first_write_bytes": "1024",
+        "write_past_limit": "EFBIG",
+        "other_limits_settable": "True",
+        "file_size_at_limit": "ok"
+      },
+      "observed": {
+        "first_write_bytes": "1024",
+        "write_past_limit": "EFBIG",
+        "other_limits_settable": "True",
+        "file_size_at_limit": "ok"
+      }
+    },
+    {
+      "name": "ptrace.strace",
+      "status": "verified",
+      "summary": "strace -- version 6.8 traced a child",
+      "expected": {
+        "strace_exit_status": "0"
+      },
+      "observed": {
+        "strace_exit_status": "0"
+      }
+    }
+  ],
+  "protections": [
+    {
+      "id": "fs_access",
+      "title": "Filesystem access control (read, write, execute, create, remove)",
+      "mechanism": "Landlock",
+      "status": "verified",
+      "requirement": "Landlock ABI 1",
+      "detail": "confined child could use its directory and was denied outside it (EACCES)",
+      "minimum": true
+    },
+    {
+      "id": "fs_refer",
+      "title": "Renames and links across directories (REFER)",
+      "mechanism": "Landlock",
+      "status": "verified",
+      "requirement": "Landlock ABI 2",
+      "detail": "cross-directory rename needed REFER (EXDEV without it)",
+      "minimum": false
+    },
+    {
+      "id": "fs_truncate",
+      "title": "File truncation (TRUNCATE)",
+      "mechanism": "Landlock",
+      "status": "verified",
+      "requirement": "Landlock ABI 3",
+      "detail": "truncation needed TRUNCATE (EACCES without it)",
+      "minimum": false
+    },
+    {
+      "id": "net_tcp",
+      "title": "TCP bind and connect limited by port",
+      "mechanism": "Landlock",
+      "status": "verified",
+      "requirement": "Landlock ABI 4",
+      "detail": "TCP connect and bind were limited to the allowed ports (EACCES otherwise)",
+      "minimum": false
+    },
+    {
+      "id": "fs_ioctl_dev",
+      "title": "ioctl on character and block devices (IOCTL_DEV)",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 5",
+      "detail": "needs Landlock ABI 5; this kernel has ABI 4. ioctl on devices the sandboxed process can open is not controlled by Landlock.",
+      "minimum": false
+    },
+    {
+      "id": "scope_abstract_unix",
+      "title": "Abstract unix socket scoping",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 6",
+      "detail": "needs Landlock ABI 6; this kernel has ABI 4. A sandboxed process can connect to abstract unix sockets of processes outside the sandbox.",
+      "minimum": false
+    },
+    {
+      "id": "scope_signal",
+      "title": "Signal scoping",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 6",
+      "detail": "needs Landlock ABI 6; this kernel has ABI 4. A sandboxed process can send signals to other processes run by the same user.",
+      "minimum": false
+    },
+    {
+      "id": "fs_resolve_unix",
+      "title": "Pathname unix socket connections (RESOLVE_UNIX)",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 9",
+      "detail": "needs Landlock ABI 9; this kernel has ABI 4. connect(2) to pathname unix sockets that exist outside the sandbox is not controlled by Landlock.",
+      "minimum": false
+    },
+    {
+      "id": "net_udp",
+      "title": "UDP bind and send limited by port",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 10",
+      "detail": "needs Landlock ABI 10; this kernel has ABI 4. Landlock cannot limit UDP bind or send by port.",
+      "minimum": false
+    },
+    {
+      "id": "namespace_use",
+      "title": "Namespace use restriction",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 12",
+      "detail": "needs Landlock ABI 12; this kernel has ABI 4. Landlock cannot restrict namespace creation or entry.",
+      "minimum": false
+    },
+    {
+      "id": "capability_use",
+      "title": "Capability use restriction",
+      "mechanism": "Landlock",
+      "status": "missing",
+      "requirement": "Landlock ABI 12",
+      "detail": "needs Landlock ABI 12; this kernel has ABI 4. Landlock cannot restrict capability use.",
+      "minimum": false
+    },
+    {
+      "id": "seccomp_filter",
+      "title": "Syscall filtering with argument checks",
+      "mechanism": "seccomp-bpf",
+      "status": "verified",
+      "requirement": "seccomp-bpf",
+      "detail": "a filter denied socket(AF_INET) by argument (EPERM) and allowed socket(AF_UNIX)",
+      "minimum": true
+    },
+    {
+      "id": "no_new_privs",
+      "title": "no_new_privs (setuid and file capabilities cannot raise privileges)",
+      "mechanism": "prctl",
+      "status": "verified",
+      "requirement": "prctl",
+      "detail": "PR_SET_NO_NEW_PRIVS took effect",
+      "minimum": true
+    },
+    {
+      "id": "rlimits",
+      "title": "Resource limits via setrlimit (the file-size limit is tested live)",
+      "mechanism": "setrlimit",
+      "status": "verified",
+      "requirement": "setrlimit",
+      "detail": "RLIMIT_FSIZE stopped a write at the limit (EFBIG)",
+      "minimum": true
+    },
+    {
+      "id": "tracing",
+      "title": "Denial tracing and observe mode",
+      "mechanism": "ptrace (strace)",
+      "status": "verified",
+      "requirement": "ptrace (strace)",
+      "detail": "strace -- version 6.8 traced a child",
+      "minimum": false
+    }
+  ],
+  "minimum_met": true,
+  "minimum_missing": [],
+  "warnings": []
+}

@@ -1,0 +1,78 @@
+convergence doctor (0.1.0.dev0)
+
+Pre-alpha: Convergence does not enforce policies yet. This report shows what this machine's
+kernel supports, proven by live tests in throwaway child processes.
+
+Host
+  kernel        Linux 6.8.0-134-generic aarch64
+  os            Ubuntu 24.04.4 LTS
+  lsm           lockdown,capability,landlock,yama,apparmor
+  user          uid 501 (unprivileged, no effective capabilities)
+  this process  seccomp mode 0, no_new_privs not set
+  yama          ptrace_scope 1
+  userns        unprivileged_userns_clone 1, apparmor_restrict_unprivileged_userns 1
+  python        3.12.3
+  libseccomp    2.5.5 (API level 6)
+  strace        strace -- version 6.8
+
+Landlock
+  ABI           4 (this version knows ABI 1-12)
+  errata        fixed: 1; applicable but not fixed: 3, 4 (informational)
+
+Live probes
+  verified     landlock.fs
+               confined child could use its directory and was denied outside it (EACCES)
+  verified     landlock.refer
+               cross-directory rename needed REFER (EXDEV without it)
+  verified     landlock.truncate
+               truncation needed TRUNCATE (EACCES without it)
+  verified     landlock.net_tcp
+               TCP connect and bind were limited to the allowed ports (EACCES otherwise)
+  unavailable  landlock.ioctl_dev
+               needs Landlock ABI 5; this kernel has ABI 4
+  unavailable  landlock.scope_signal
+               needs Landlock ABI 6; this kernel has ABI 4
+  unavailable  landlock.scope_abstract_unix
+               needs Landlock ABI 6; this kernel has ABI 4
+  verified     seccomp.filter
+               a filter denied socket(AF_INET) by argument (EPERM) and allowed
+               socket(AF_UNIX)
+  verified     no_new_privs
+               PR_SET_NO_NEW_PRIVS took effect
+  verified     rlimits
+               RLIMIT_FSIZE stopped a write at the limit (EFBIG)
+  verified     ptrace.strace
+               strace -- version 6.8 traced a child
+
+What this machine supports
+  verified     Filesystem access control (read, write, execute, create, remove) [Landlock ABI 1]
+  verified     Renames and links across directories (REFER) [Landlock ABI 2]
+  verified     File truncation (TRUNCATE) [Landlock ABI 3]
+  verified     TCP bind and connect limited by port [Landlock ABI 4]
+  missing      ioctl on character and block devices (IOCTL_DEV) [Landlock ABI 5]
+               needs Landlock ABI 5; this kernel has ABI 4. ioctl on devices the sandboxed
+               process can open is not controlled by Landlock.
+  missing      Abstract unix socket scoping [Landlock ABI 6]
+               needs Landlock ABI 6; this kernel has ABI 4. A sandboxed process can connect
+               to abstract unix sockets of processes outside the sandbox.
+  missing      Signal scoping [Landlock ABI 6]
+               needs Landlock ABI 6; this kernel has ABI 4. A sandboxed process can send
+               signals to other processes run by the same user.
+  missing      Pathname unix socket connections (RESOLVE_UNIX) [Landlock ABI 9]
+               needs Landlock ABI 9; this kernel has ABI 4. connect(2) to pathname unix
+               sockets that exist outside the sandbox is not controlled by Landlock.
+  missing      UDP bind and send limited by port [Landlock ABI 10]
+               needs Landlock ABI 10; this kernel has ABI 4. Landlock cannot limit UDP bind
+               or send by port.
+  missing      Namespace use restriction [Landlock ABI 12]
+               needs Landlock ABI 12; this kernel has ABI 4. Landlock cannot restrict
+               namespace creation or entry.
+  missing      Capability use restriction [Landlock ABI 12]
+               needs Landlock ABI 12; this kernel has ABI 4. Landlock cannot restrict
+               capability use.
+  verified     Syscall filtering with argument checks [seccomp-bpf]
+  verified     no_new_privs (setuid and file capabilities cannot raise privileges) [prctl]
+  verified     Resource limits via setrlimit (the file-size limit is tested live) [setrlimit]
+  verified     Denial tracing and observe mode [ptrace (strace)]
+
+Minimum enforcement set (filesystem, seccomp, no_new_privs, resource limits): available

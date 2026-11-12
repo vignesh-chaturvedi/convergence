@@ -1,8 +1,8 @@
 {
   "schema": "convergence.escape-report/1",
   "environment": {
-    "timestamp": "2026-11-12T01:21:30+00:00",
-    "commit": "5038589685e97a01763ac68046f733069120595b+uncommitted",
+    "timestamp": "2026-11-12T01:52:26+00:00",
+    "commit": "46c076d0efefdbb2c5849b37ecfaad27b4762b7a+uncommitted",
     "kernel": "6.8.0-134-generic",
     "arch": "aarch64",
     "os": "Ubuntu 24.04.4 LTS",
@@ -30,7 +30,8 @@
       "wilson_95": null,
       "text": "n/a (nothing counted)"
     },
-    "documented_limitations": []
+    "documented_limitations": [],
+    "not_testable_on_this_host": []
   },
   "by_set": {
     "controls": {
@@ -52,7 +53,8 @@
         "wilson_95": null,
         "text": "n/a (nothing counted)"
       },
-      "documented_limitations": []
+      "documented_limitations": [],
+      "not_testable_on_this_host": []
     }
   },
   "results": [

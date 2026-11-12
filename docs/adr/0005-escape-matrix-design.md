@@ -61,6 +61,22 @@ launcher real and drive the escape rate to zero (or document each remaining esca
 known limitation). Writing the matrix first, red, is deliberate: the tests are not shaped to
 fit an implementation that does not yet exist.
 
+### Containment counts only if the attack reached its attempt
+
+A payload that never got to its attempt — a missing grant, a crash at start-up — looks
+exactly like one Convergence contained. So every attack emits a fresh `${REACHED}` token
+just before attempting. The token is the payload's own report, so it is trusted only in the
+safe direction: its absence turns a containment into a failure (`not-reached`) or an
+unconfined escape into `invalid`, but it can never turn an escape into anything else.
+
+### What the host already prevents is not credited to Convergence
+
+Some behaviour is refused by the host before Convergence is involved; on Ubuntu 24.04,
+unprivileged user namespaces (AppArmor) and TIOCSTI (`dev.tty.legacy_tiocsti = 0`). A case
+declares such preconditions; where the host lacks one, the case is `not-testable` and
+excluded from both rates. Counting it as blocked would credit Convergence with the host's
+work.
+
 ### ABI-aware expectations, so limitations are not counted as surprises
 
 An attack declares the mechanism expected to stop it and the minimum Landlock ABI that

@@ -107,6 +107,9 @@ def summarise(results: list[CaseResult]) -> dict[str, Any]:
     summary["documented_limitations"] = [
         r.id for r in results if r.result is Result.DOCUMENTED_LIMITATION
     ]
+    summary["not_testable_on_this_host"] = [
+        r.id for r in results if r.result is Result.NOT_TESTABLE
+    ]
     return summary
 
 

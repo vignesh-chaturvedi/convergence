@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+import secrets
 import socket
 import threading
 import time
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from escape.oracles.base import CaseDirs, Evidence, Observation, Oracle, Setup, nonce
 
@@ -36,20 +37,50 @@ def _http_request_complete(data: bytes) -> bool:
     return True
 
 
+UNIX_PATH_MAX = 108  # sizeof(sun_path), including the terminating NUL
+
+IP_FAMILIES = ("ipv4", "ipv6")
+UNIX_FAMILIES = ("unix", "unix-abstract")
+
+
 class NetworkSinkConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-    protocol: Literal["tcp", "udp"] = "tcp"
-    family: Literal["ipv4", "ipv6"] = "ipv4"
+    family: Literal["ipv4", "ipv6", "unix", "unix-abstract"] = "ipv4"
+    # IP families: tcp | udp. Unix families: stream | datagram.
+    protocol: Literal["tcp", "udp", "stream", "datagram"] = "tcp"
     require_nonce: bool = False  # controls: the data must carry ${SINK_NONCE}
+
+    @model_validator(mode="after")
+    def _protocol_matches_family(self) -> NetworkSinkConfig:
+        if self.family in IP_FAMILIES and self.protocol not in ("tcp", "udp"):
+            raise ValueError(f"family {self.family} takes protocol tcp or udp")
+        if self.family in UNIX_FAMILIES and self.protocol not in ("stream", "datagram"):
+            raise ValueError(f"family {self.family} takes protocol stream or datagram")
+        return self
+
+    @property
+    def datagram(self) -> bool:
+        return self.protocol in ("udp", "datagram")
+
+
+def _describe_peer(peer: object, kind: str) -> str:
+    if isinstance(peer, tuple) and len(peer) >= 2:
+        return f"{kind} from {peer[0]}:{peer[1]}"
+    return f"{kind} on the unix socket"
 
 
 class NetworkSink(Oracle):
     """A listener the harness owns. Observed if anything reached it.
 
-    For attacks the sink's port is not in the policy, so any connection or datagram is an
-    escape. For controls the port is granted and the payload must deliver ``${SINK_NONCE}``.
-    A TCP request that looks like HTTP gets a minimal 200 response so ordinary HTTP clients
-    complete.
+    IP families: for attacks the sink's port is not in the policy, so any connection or
+    datagram is an escape. For controls the port is granted and the payload must deliver
+    ``${SINK_NONCE}``. A TCP request that looks like HTTP gets a minimal 200 response so
+    ordinary HTTP clients complete.
+
+    Unix families stand in for a host service outside the sandbox (a container runtime or
+    session bus socket): ``unix`` binds ``${SINK_PATH}`` outside every grant, and
+    ``unix-abstract`` binds the abstract name ``${SINK_ABSTRACT}`` (connect to it with a
+    leading NUL byte, which a variable cannot carry).
     """
 
     type_name = "network-sink"
@@ -61,32 +92,52 @@ class NetworkSink(Oracle):
         self.events: list[str] = []
         self.received = bytearray()
         self._stop = threading.Event()
-        family = socket.AF_INET6 if config.family == "ipv6" else socket.AF_INET
-        host = "::1" if config.family == "ipv6" else "127.0.0.1"
-        kind = socket.SOCK_DGRAM if config.protocol == "udp" else socket.SOCK_STREAM
-        self.sock = socket.socket(family, kind)
-        self.sock.bind((host, 0))
+        kind = socket.SOCK_DGRAM if config.datagram else socket.SOCK_STREAM
+        variables: dict[str, str | int] = {"SINK_NONCE": self.secret}
+
+        if config.family in UNIX_FAMILIES:
+            self.sock = socket.socket(socket.AF_UNIX, kind)
+            if config.family == "unix":
+                path = dirs.outside / "sink.sock"
+                if len(str(path).encode()) >= UNIX_PATH_MAX:
+                    self.sock.close()
+                    raise RuntimeError(f"unix socket path too long for sun_path: {path}")
+                self.sock.bind(str(path))
+                variables["SINK_PATH"] = str(path)
+            else:
+                name = f"convergence-sink-{secrets.token_hex(8)}"
+                self.sock.bind("\0" + name)
+                variables["SINK_ABSTRACT"] = name
+            self.label = "unix"
+        else:
+            family = socket.AF_INET6 if config.family == "ipv6" else socket.AF_INET
+            host = "::1" if config.family == "ipv6" else "127.0.0.1"
+            self.sock = socket.socket(family, kind)
+            self.sock.bind((host, 0))
+            variables["SINK_HOST"] = host
+            variables["SINK_PORT"] = int(self.sock.getsockname()[1])
+            self.label = "TCP" if kind == socket.SOCK_STREAM else "UDP"
+
         if kind == socket.SOCK_STREAM:
             self.sock.listen(16)
         self.sock.settimeout(0.1)
-        port: int = self.sock.getsockname()[1]
-        target = self._serve_udp if kind == socket.SOCK_DGRAM else self._serve_tcp
+        target = self._serve_datagram if kind == socket.SOCK_DGRAM else self._serve_stream
         self._thread = threading.Thread(target=target, name="escape-sink", daemon=True)
         self._thread.start()
-        return Setup(variables={"SINK_HOST": host, "SINK_PORT": port, "SINK_NONCE": self.secret})
+        return Setup(variables=variables)
 
     def _keep(self, data: bytes) -> None:
         room = MAX_RECEIVED - len(self.received)
         if room > 0:
             self.received += data[:room]
 
-    def _serve_tcp(self) -> None:
+    def _serve_stream(self) -> None:
         while not self._stop.is_set():
             try:
                 conn, peer = self.sock.accept()
             except (TimeoutError, OSError):
                 continue
-            self.events.append(f"TCP connection from {peer[0]}:{peer[1]}")
+            self.events.append(_describe_peer(peer, f"{self.label} connection"))
             with conn:
                 conn.settimeout(0.5)
                 data = bytearray()
@@ -103,13 +154,13 @@ class NetworkSink(Oracle):
                     with contextlib.suppress(OSError):
                         conn.sendall(HTTP_OK)
 
-    def _serve_udp(self) -> None:
+    def _serve_datagram(self) -> None:
         while not self._stop.is_set():
             try:
                 data, peer = self.sock.recvfrom(65536)
             except (TimeoutError, OSError):
                 continue
-            self.events.append(f"UDP datagram from {peer[0]}:{peer[1]}")
+            self.events.append(_describe_peer(peer, f"{self.label} datagram"))
             self._keep(data)
 
     def check(self, dirs: CaseDirs, evidence: Evidence) -> Observation:

@@ -17,6 +17,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from convergence.policy.load import _StrictLoader
+from escape.preconditions import Precondition
 
 SCHEMA = "convergence.escapecase/1"
 
@@ -119,6 +120,13 @@ class OracleSpec(BaseModel):
 
 class Platforms(_Strict):
     arch: tuple[Literal["x86_64", "aarch64"], ...] = _ARCHES
+    requires: tuple[Precondition, ...] = Field(
+        default=(),
+        description=(
+            "Host behaviour the case needs (see escape/preconditions.py). Where the host "
+            "already prevents it, the case is not-testable, never counted as blocked."
+        ),
+    )
 
 
 class Case(_Strict):

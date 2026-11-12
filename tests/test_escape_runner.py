@@ -9,6 +9,8 @@ import pytest
 
 from escape import runner
 from escape.launchers import ConvergenceLauncher, UnconfinedLauncher
+from escape.preconditions import Availability
+from escape.report import CaseResult
 from escape.schema import load_case
 from escape.score import Result
 
@@ -123,3 +125,52 @@ oracle: {type: workload-output, require_file: true}
 def test_list_controls(capsys: pytest.CaptureFixture[str]) -> None:
     assert runner.main(["list", "--set", "controls"]) == 0
     assert "control-git-log" in capsys.readouterr().out
+
+
+ATTACK_SHAPED = """\
+id: harness-reached-check
+category: filesystem-read
+description: harness self-test; the payload attempts nothing
+expect: {verdict: blocked, mechanism: landlock-fs, min_abi: 1}
+policy:
+  version: 1
+  environment: {set: {PATH: /usr/bin:/bin}}
+payload: {argv: [/bin/sh, -c, "PAYLOAD"]}
+oracle: {type: canary-file-read}
+"""
+
+
+def _run_text(tmp_path: Path, text: str) -> CaseResult:
+    path = tmp_path / "case.yaml"
+    path.write_text(text)
+    return runner.Runner(UnconfinedLauncher(), subreaper=False).run_case(
+        path, load_case(path), "dev"
+    )
+
+
+def test_an_attack_that_does_nothing_is_invalid(tmp_path: Path) -> None:
+    # It announced it reached its attempt but the effect never happened.
+    item = _run_text(tmp_path, ATTACK_SHAPED.replace("PAYLOAD", "echo ${REACHED}"))
+    assert item.result is Result.INVALID
+    assert "REACHED" not in item.evidence
+
+
+def test_a_missing_reached_marker_is_called_out(tmp_path: Path) -> None:
+    item = _run_text(tmp_path, ATTACK_SHAPED.replace("PAYLOAD", "true"))
+    assert item.result is Result.INVALID
+    assert "never emitted ${REACHED}" in item.evidence
+
+
+def test_missing_host_precondition_is_not_testable(tmp_path: Path) -> None:
+    path = tmp_path / "case.yaml"
+    path.write_text(
+        ATTACK_SHAPED.replace("PAYLOAD", "true") + "platforms: {requires: [unprivileged-userns]}\n"
+    )
+    case_runner = runner.Runner(UnconfinedLauncher(), subreaper=False)
+    case_runner.preconditions["unprivileged-userns"] = Availability(False, "refused for this test")
+    item = case_runner.run_case(path, load_case(path), "dev")
+    assert item.result is Result.NOT_TESTABLE
+    assert "refused for this test" in item.evidence
+
+    case_runner.preconditions["unprivileged-userns"] = Availability(True, "allowed")
+    assert case_runner.run_case(path, load_case(path), "dev").result is Result.INVALID

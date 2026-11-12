@@ -1,8 +1,8 @@
 {
   "schema": "convergence.escape-report/1",
   "environment": {
-    "timestamp": "2026-11-12T01:21:28+00:00",
-    "commit": "5038589685e97a01763ac68046f733069120595b+uncommitted",
+    "timestamp": "2026-11-12T01:52:25+00:00",
+    "commit": "46c076d0efefdbb2c5849b37ecfaad27b4762b7a+uncommitted",
     "kernel": "6.8.0-134-generic",
     "arch": "aarch64",
     "os": "Ubuntu 24.04.4 LTS",
@@ -30,7 +30,8 @@
       "wilson_95": null,
       "text": "n/a (nothing counted)"
     },
-    "documented_limitations": []
+    "documented_limitations": [],
+    "not_testable_on_this_host": []
   },
   "by_set": {
     "controls": {
@@ -52,7 +53,8 @@
         "wilson_95": null,
         "text": "n/a (nothing counted)"
       },
-      "documented_limitations": []
+      "documented_limitations": [],
+      "not_testable_on_this_host": []
     }
   },
   "results": [
@@ -65,7 +67,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/output.txt",
-      "elapsed": 0.034,
+      "elapsed": 0.035,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -80,7 +82,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in stdout",
-      "elapsed": 0.016,
+      "elapsed": 0.017,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -95,7 +97,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/output.txt",
-      "elapsed": 0.037,
+      "elapsed": 0.033,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -125,7 +127,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/notes.db",
-      "elapsed": 0.069,
+      "elapsed": 0.068,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -140,7 +142,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/output.txt",
-      "elapsed": 0.035,
+      "elapsed": 0.066,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -155,7 +157,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/module.pyc",
-      "elapsed": 0.036,
+      "elapsed": 0.035,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -169,8 +171,8 @@
       "mechanism": "none (benign control)",
       "min_abi": 0,
       "result": "valid",
-      "evidence": "1 event(s) at the sink; first: TCP connection from 127.0.0.1:47284",
-      "elapsed": 0.124,
+      "evidence": "1 event(s) at the sink; first: TCP connection from 127.0.0.1:42278",
+      "elapsed": 0.071,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -184,8 +186,8 @@
       "mechanism": "none (benign control)",
       "min_abi": 0,
       "result": "valid",
-      "evidence": "the harness got the marker back from port 56027",
-      "elapsed": 0.073,
+      "evidence": "the harness got the marker back from port 43301",
+      "elapsed": 0.068,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,
@@ -200,7 +202,7 @@
       "min_abi": 0,
       "result": "valid",
       "evidence": "the input's marker came through in out/output.txt",
-      "elapsed": 0.035,
+      "elapsed": 0.033,
       "exit_code": 0,
       "signal": null,
       "timed_out": false,

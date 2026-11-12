@@ -2,7 +2,7 @@
 
 - launcher: `convergence`
 - kernel: 6.8.0-134-generic (aarch64), Ubuntu 24.04.4 LTS, Landlock ABI 4
-- commit: `5038589685e97a01763ac68046f733069120595b+uncommitted`, convergence 0.1.0.dev0, Python 3.12.3, 2026-11-12T01:21:30+00:00
+- commit: `46c076d0efefdbb2c5849b37ecfaad27b4762b7a+uncommitted`, convergence 0.1.0.dev0, Python 3.12.3, 2026-11-12T01:52:26+00:00
 
 | Set | Cases | Escape rate | False-denial rate | Results |
 |---|---:|---|---|---|

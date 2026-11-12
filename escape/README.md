@@ -22,7 +22,10 @@ in [ADR 0005](../docs/adr/0005-escape-matrix-design.md); the boundary it tests i
 4. **ABI-aware.** A case names the mechanism and minimum ABI expected to stop it. Below that
    ABI, an escape is a *documented limitation*, not a failure.
 5. **The holdout is sealed and not consulted during Phase 4 tuning.**
-6. **Nothing that did not run is counted as a pass.**
+6. **Nothing that did not run is counted as a pass**, and an attack only counts as
+   contained if it *reached* its attempt (see [The reached marker](#the-reached-marker)).
+7. **What the host already prevents is not credited to Convergence.** A case that needs
+   something the host refuses is `not-testable` (see [Host preconditions](#host-preconditions)).
 
 ## Layout
 
@@ -36,6 +39,7 @@ escape/
   _limits.py                # harness safety rlimits for unconfined runs (exec wrapper)
   oracles/                  # base interface, registry, and one module per oracle family
     _sentinel.py            # harness-owned target process for the process oracles
+  preconditions.py          # host preconditions (requires:) and their probes
   score.py                  # result mapping, escape rate, false-denial rate, Wilson CIs
   report.py                 # JSON (authoritative) and Markdown reports
   seal.py                   # holdout manifest: seal and verify
@@ -76,6 +80,7 @@ policy:                          # an inline convergence.policy/1 document
   environment:
     set: {PATH: /usr/bin:/bin}
 payload:
+  # Every attack must emit ${REACHED} (flushed) just before its attempt.
   argv: ["${PYTHON}", "-c", "..."]   # exactly one of argv or file
   # file: payload.py                 # .py or .sh, relative to the case file (see below)
   # stdin: "..."                     # optional
@@ -83,6 +88,7 @@ oracle:
   type: canary-file-read         # plus that oracle's own keys (strictly validated)
 platforms:
   arch: [x86_64, aarch64]        # default: both; other architectures are skipped
+  requires: []                   # host preconditions, e.g. [unprivileged-userns]
 ```
 
 **`payload.file`.** The file is copied into `${WORKDIR}` and run with `${PYTHON}` (`.py`) or
@@ -104,11 +110,13 @@ so `tcp_connect: ["${SINK_PORT}"]` works.
 | `${OUT_DIR}`, `${OUT}` | runner | a directory the policy should grant write on, and `output.txt` in it. Everything written here is scanned |
 | `${PYTHON}` | runner | the system interpreter, resolved (for example `/usr/bin/python3.12`) |
 | `${LOADER}` | runner | the dynamic loader for this architecture, resolved |
+| `${REACHED}` | runner | a fresh token an attack must emit just before its attempt |
 | `${CANARY_FILE}`, `${CANARY_DIR}` | `canary-file-read` | a secret file outside every grant, and its directory |
 | `${FORBIDDEN_PATH}`, `${SENTINEL_FILE}` | `canary-file-write` | a path that must not be created; a file that must not change |
 | `${SENTINEL_FILE}` | `canary-delete` | a file that must not be removed, moved, or replaced |
 | `${INPUT_FILE}`, `${INPUT_JSON}`, `${INPUT_MODULE}`, `${REPO}` | `workload-output` | inputs inside `${WORKDIR}` carrying a marker (`${REPO}` with `fixture: git-repo`) |
-| `${SINK_HOST}`, `${SINK_PORT}`, `${SINK_NONCE}` | `network-sink` | the harness listener, and data a control must deliver |
+| `${SINK_HOST}`, `${SINK_PORT}`, `${SINK_NONCE}` | `network-sink` (IP) | the harness listener, and data a control must deliver |
+| `${SINK_PATH}` / `${SINK_ABSTRACT}` | `network-sink` (`unix` / `unix-abstract`) | a unix-socket listener outside every grant: a path, or an abstract name to connect to with a leading NUL byte |
 | `${SERVE_PORT}`, `${SERVE_NONCE}` | `server-reachable` | the port a control must serve on, and what to answer |
 | `${SENTINEL_PID}` | `process-read`, `process-signal` | the harness-owned target process |
 | `${ENV_CANARY_NAME}` | `env-leak` | the *name* of the supervisor's secret variable (never its value) |
@@ -131,7 +139,7 @@ and optionally `teardown()`.
 | `canary-file-write` | — | note a forbidden path; plant a sentinel file | the path exists, or the sentinel changed or vanished |
 | `canary-delete` | — | plant a sentinel and **hold it open** | the original was unlinked, moved away, replaced, or edited |
 | `workload-output` | `fixture: files\|git-repo`, `check: nonce-in-output\|archive`, `require_file` | plant inputs inside `${WORKDIR}` carrying a marker | the marker came out (in stdout or `${OUT_DIR}`; only files if `require_file`; inside an archive for `archive`) |
-| `network-sink` | `protocol: tcp\|udp`, `family: ipv4\|ipv6`, `require_nonce` | a harness listener on an ephemeral port | it received a connection or datagram (with `${SINK_NONCE}` if `require_nonce`) |
+| `network-sink` | `family: ipv4\|ipv6\|unix\|unix-abstract`, `protocol: tcp\|udp` (IP) or `stream\|datagram` (unix), `require_nonce` | a harness listener: an ephemeral IP port, or a unix socket standing in for a host service | it received a connection or datagram (with `${SINK_NONCE}` if `require_nonce`) |
 | `server-reachable` | — | pick a port; poll it from the harness | the harness got `${SERVE_NONCE}` back |
 | `process-read` | `allow_ptrace` | a sentinel holding a secret in memory only | the secret appears in any output channel |
 | `process-signal` | `allow_ptrace` | a sentinel that records `SIGUSR1` in a host file | it was signalled, stopped, or killed |
@@ -167,6 +175,37 @@ Details that matter:
   measured limit must be set in the policy. Keep the limits small (for example
   `memory_mb: 64`, `max_processes: 8`) and `cpu_seconds` below `wall_clock_seconds`, so an
   unconfined run clearly exceeds the policy before the harness's safety limits stop it.
+
+### The reached marker
+
+Every attack payload must emit the runner's `${REACHED}` token — to stdout (flushed) or to a
+file under `${OUT_DIR}` — **immediately before** its attempt. Without it, an attack that was
+stopped by something else (a missing grant, a crash at start-up, a typo) would look exactly
+like one Convergence contained.
+
+The marker is the payload's own report, so it is trusted only in the safe direction:
+
+- unconfined, an attack that escapes without emitting it is `invalid` (fix the payload);
+- under Convergence, an attack that is contained without emitting it is `not-reached`, a
+  failure, never a pass;
+- an attack that escapes is an escape, marker or not. The marker can never excuse one.
+
+Controls do not need it: their positive oracle already proves they ran. Flush it. Buffered
+output is lost if the process is then killed, which would turn a real containment into
+`not-reached`.
+
+### Host preconditions
+
+Some behaviour is already prevented by the host before Convergence is involved. Such a case
+cannot escape even unconfined, so it can say nothing about Convergence. A case lists what it
+needs in `platforms.requires`; the runner probes each once at start-up, in a throwaway
+child, by trying the behaviour itself. Where the host lacks it, the case is `not-testable`:
+reported, excluded from both rates, and never counted as blocked.
+
+| Precondition | Probe | Lima VM (Ubuntu 24.04, kernel 6.8) |
+|---|---|---|
+| `unprivileged-userns` | create a user namespace, map ids, and create a mount namespace inside it | refused: mapping ids fails with `EACCES` (AppArmor's unprivileged-userns restriction) |
+| `legacy-tiocsti` | `dev.tty.legacy_tiocsti` is 1, or the kernel predates it | refused: it is 0, so TIOCSTI already needs `CAP_SYS_ADMIN` |
 
 ## Launchers
 
@@ -204,10 +243,13 @@ floods stdout cannot exhaust the runner.
 | control | convergence | no | `false-denial` (the policy was too tight) | yes |
 | any | convergence | — | `skipped-unenforceable` if `explain` says the policy cannot be enforced here | |
 | any | convergence | — | `launcher-unavailable` if `convergence run` does not exist | yes |
+| attack | convergence | no, and `${REACHED}` missing | `not-reached` (stopped before its attempt; proves nothing) | yes |
+| any | any | — | `not-testable` if the host lacks a `requires` precondition | |
 | any | any | — | `skipped-platform`, or `error` if the harness could not run the case | `error`: yes |
 
 - **Escape rate** = escapes / (passes + escapes) among attacks. Documented limitations,
-  skips, and unavailable runs are excluded and listed separately, never folded in.
+  not-testable cases, skips, and unavailable runs are excluded and listed separately, never
+  folded in.
 - **False-denial rate** = false denials / (passes + false denials) among controls.
 - Both come with Wilson 95% intervals and are reported per set (dev, holdout, controls) and
   per kernel, one report per environment.
@@ -265,14 +307,14 @@ shown. `min_abi` marks where a lower kernel yields a documented limitation.
 | net-tcp-bind | server-reachable / network-sink | landlock-net | 4 | 1 | 1 |
 | net-udp | network-sink (udp) | seccomp (proto) / landlock-net | 0/10 | 1 | 1 |
 | net-raw-socket | network-sink | seccomp | 0 | 1 | 0 |
-| unix-socket-host | network-sink | landlock (ABI 9) / seccomp | 0 | 1 | 1 |
+| unix-socket-host | network-sink (`unix` / `unix-abstract`) | landlock (ABI 9) / seccomp | 0 | 1 | 1 |
 | ptrace | process-read | seccomp | 0 | 1 | 1 |
 | process-vm-readv | process-read | seccomp | 0 | 1 | 0 |
-| mount-namespace (mount/unshare/setns/clone-ns) | canary-file-read / persist | seccomp | 0 | 3 | 1 |
+| mount-namespace (mount/unshare/setns/clone-ns) | canary-file-read / persist; `requires: [unprivileged-userns]` for namespace routes | seccomp | 0 | 3 | 1 |
 | clone3-bypass | canary-file-read | seccomp (ENOSYS fallback) | 0 | 1 | 1 |
 | io-uring-bypass | canary-file-read / canary-file-write | seccomp | 0 | 1 | 1 |
 | bpf-perf-keyctl-userfaultfd | process-read / resource-dos | seccomp | 0 | 1 | 0 |
-| tiocsti-injection | process-signal (proxy) | seccomp (ioctl arg) | 0 | 1 | 0 |
+| tiocsti-injection | process-signal (proxy); `requires: [legacy-tiocsti]` | seccomp (ioctl arg) | 0 | 1 | 0 |
 | signal-outside | process-signal | landlock-signal-scope | 6 | 1 | 1 |
 | resource-fork-bomb | resource-dos (processes) | rlimit + supervisor | 0 | 1 | 1 |
 | resource-memory | resource-dos (memory) | rlimit | 0 | 1 | 0 |
@@ -284,6 +326,9 @@ shown. `min_abi` marks where a lower kernel yields a documented limitation.
 | fd-leak | fd-leak | supervisor | 0 | 1 | 0 |
 
 The schema's category list is tested against this table, so the two cannot drift apart.
+On the tested hosts, `mount-namespace` cases that need user namespaces and the
+`tiocsti-injection` case will be `not-testable`; they still belong in the corpus, because
+they become testable on a host that allows the behaviour.
 Totals meet the ≥45 dev / ≥20 holdout targets with margin. Adjust counts up, not down, and
 keep each category represented in both sets.
 

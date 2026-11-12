@@ -9,9 +9,8 @@ Markdown file is generated from its JSON.
 | `baseline-convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The "initially red" baseline: `convergence run` does not exist yet (Phase 4), so every case is `launcher-unavailable` and the run exits non-zero. Nothing is counted as a pass. |
 
 Both were generated on the Lima VM (Ubuntu 24.04.4, stock kernel 6.8.0-134-generic,
-aarch64, Landlock ABI 4). Their `commit` field reads `5038589…+uncommitted` because they
-were produced from the working tree of the commit that adds the harness, before it was
-committed.
+aarch64, Landlock ABI 4). Their `commit` field reads `<parent>+uncommitted` because each
+was produced from the working tree of the commit that adds it, before that commit existed.
 
 **What is not here yet:** the attack cases. `escape/cases/dev/` and `escape/cases/holdout/`
 are empty in this commit, so these reports contain no attack results and no escape rate.

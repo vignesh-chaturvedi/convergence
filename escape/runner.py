@@ -21,6 +21,7 @@ import argparse
 import contextlib
 import json
 import os
+import secrets
 import shutil
 import stat
 import sys
@@ -35,6 +36,8 @@ from escape import report, seal
 from escape.expand import UnknownVariable, VarValue, expand, expand_string
 from escape.launchers import LAUNCHERS, ConvergenceLauncher, LaunchSpec, UnconfinedLauncher
 from escape.oracles import CaseDirs, Evidence, OracleConfigError, create
+from escape.oracles.base import scan_outputs
+from escape.preconditions import probe_all
 from escape.procs import Sampler, become_subreaper, kill_all, reap_zombie_children
 from escape.report import CaseResult, Environment
 from escape.schema import Case, CaseError, load_dir
@@ -87,6 +90,8 @@ class Runner:
         self.abi = kernel_abi()
         self.python = _python()
         self._caps: Any = None
+        # Probed once, up front: some probes fork, which is only safe before threads start.
+        self.preconditions = probe_all()
         if subreaper:
             # Daemons that double-fork out of a run's session reparent here, so the persist
             # oracle can see them. Without this they would reparent to init and go unseen.
@@ -100,12 +105,13 @@ class Runner:
             self._caps = Capabilities.from_doctor(run_doctor())
         return self._caps
 
-    def _base_variables(self, dirs: CaseDirs) -> dict[str, VarValue]:
+    def _base_variables(self, dirs: CaseDirs, reached: str) -> dict[str, VarValue]:
         variables: dict[str, VarValue] = {
             "WORKDIR": str(dirs.work),
             "OUT_DIR": str(dirs.out),
             "OUT": str(dirs.out / "output.txt"),
             "PYTHON": self.python,
+            "REACHED": reached,
         }
         loader = next((p for p in LOADERS if os.path.exists(p)), None)
         if loader is not None:
@@ -129,6 +135,15 @@ class Runner:
                 f"not for {os.uname().machine}",
             )
             return result
+        missing = [r for r in case.platforms.requires if not self.preconditions[r].available]
+        if missing:
+            details = "; ".join(f"{r}: {self.preconditions[r].detail}" for r in missing)
+            result.result = Result.NOT_TESTABLE
+            result.evidence = (
+                f"the host already prevents what this case needs ({details}), so it cannot "
+                "show anything about Convergence here"
+            )
+            return result
         reason = self.launcher.unavailable_reason()
         if reason is not None:
             result.result, result.evidence = Result.LAUNCHER_UNAVAILABLE, reason
@@ -142,7 +157,8 @@ class Runner:
             scratch.mkdir(mode=0o700)
             oracle = create(case.oracle)
             setup = oracle.setup(dirs)
-            variables = self._base_variables(dirs) | setup.variables
+            reached_token = "convergence-reached-" + secrets.token_hex(8)
+            variables = self._base_variables(dirs, reached_token) | setup.variables
 
             if case.payload.file is not None:
                 source = path.parent / case.payload.file
@@ -211,14 +227,21 @@ class Runner:
                 policy=policy,
             )
             observation = oracle.check(dirs, evidence)
+            reached = scan_outputs(reached_token, output, dirs.out) is not None
             result.result = score(
                 is_control=case.is_control,
                 launcher=self.launcher.name,
                 observed=observation.observed,
+                reached=reached,
                 min_abi=case.expect.min_abi,
                 kernel_abi=self.abi,
             )
             result.evidence = observation.evidence
+            if not case.is_control and not reached:
+                result.evidence += (
+                    "; the payload never emitted ${REACHED}, so it may have been stopped before "
+                    "its attempt (emit it, flushed, just before attempting)"
+                )
             result.elapsed = round(exit_info.elapsed, 3)
             result.exit_code = exit_info.exit_code
             result.signal = exit_info.signal

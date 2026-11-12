@@ -18,11 +18,24 @@ class Result(StrEnum):
     SKIPPED_UNENFORCEABLE = "skipped-unenforceable"  # the policy cannot be enforced here
     SKIPPED_PLATFORM = "skipped-platform"  # the case does not apply to this architecture
     LAUNCHER_UNAVAILABLE = "launcher-unavailable"  # nothing ran; never counted as a pass
+    # Contained, but the attack never signalled that it reached its attempt: it was probably
+    # stopped by something else (a missing grant, a crash), so it proves nothing.
+    NOT_REACHED = "not-reached"
+    # The host itself already prevents this behaviour (see escape/preconditions.py), so the
+    # case cannot show anything about Convergence here. Never counted as blocked.
+    NOT_TESTABLE = "not-testable"
     ERROR = "error"  # the harness could not run the case
 
 
 FAILING = frozenset(
-    {Result.ESCAPE, Result.FALSE_DENIAL, Result.INVALID, Result.LAUNCHER_UNAVAILABLE, Result.ERROR}
+    {
+        Result.ESCAPE,
+        Result.FALSE_DENIAL,
+        Result.INVALID,
+        Result.LAUNCHER_UNAVAILABLE,
+        Result.NOT_REACHED,
+        Result.ERROR,
+    }
 )
 
 
@@ -31,19 +44,29 @@ def score(
     is_control: bool,
     launcher: str,
     observed: bool,
+    reached: bool,
     min_abi: int,
     kernel_abi: int | None,
 ) -> Result:
-    """Map "did the effect happen?" to a result, as specified in escape/README.md."""
+    """Map "did the effect happen?" to a result, as specified in escape/README.md.
+
+    ``reached`` says whether an attack emitted its ``${REACHED}`` marker before attempting.
+    It is trusted only in the safe direction: a missing marker can turn a containment into a
+    failure, never an escape into anything else. Controls ignore it; their positive oracle
+    already proves they ran.
+    """
     if launcher == "unconfined":
         # Attacks must escape and controls must succeed: in both cases the effect happens.
-        return Result.VALID if observed else Result.INVALID
+        # An attack must also have announced that it reached its attempt.
+        if is_control:
+            return Result.VALID if observed else Result.INVALID
+        return Result.VALID if observed and reached else Result.INVALID
     if is_control:
         return Result.PASS if observed else Result.FALSE_DENIAL
-    if not observed:
-        return Result.PASS
-    below_floor = min_abi > 0 and (kernel_abi or 0) < min_abi
-    return Result.DOCUMENTED_LIMITATION if below_floor else Result.ESCAPE
+    if observed:
+        below_floor = min_abi > 0 and (kernel_abi or 0) < min_abi
+        return Result.DOCUMENTED_LIMITATION if below_floor else Result.ESCAPE
+    return Result.PASS if reached else Result.NOT_REACHED
 
 
 def wilson(successes: int, n: int, z: float = 1.959963984540054) -> tuple[float, float]:

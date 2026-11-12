@@ -8,6 +8,14 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Escape-matrix harness additions:
+  - unix-socket sinks (`network-sink` with `family: unix` or `unix-abstract`), standing in
+    for a host service outside the sandbox;
+  - host preconditions (`platforms.requires`: `unprivileged-userns`, `legacy-tiocsti`),
+    probed by trying the behaviour in a throwaway child. A case the host already prevents is
+    `not-testable`, never counted as blocked. On the Ubuntu 24.04 VM both are refused;
+  - a mandatory `${REACHED}` marker for attacks. Contained without it is `not-reached` (a
+    failure); escaping unconfined without it is `invalid`; an escape is never excused.
 - Escape-matrix harness (`escape/`), outside the installed package:
   - a strict case format (`convergence.escapecase/1`) with an ABI-aware expected verdict;
   - `${VARIABLE}` expansion: strict in policies and argv, lenient in shell payload files;

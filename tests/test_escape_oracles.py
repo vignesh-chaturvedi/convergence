@@ -8,12 +8,15 @@ attack payloads; those live in escape/cases/.
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import socket
 import subprocess
 import tarfile
+import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +24,7 @@ import pytest
 
 from convergence.policy.load import parse_policy
 from escape.launchers import Exit, Output
-from escape.oracles import CaseDirs, Evidence, Oracle, Setup, create
+from escape.oracles import CaseDirs, Evidence, Oracle, OracleConfigError, Setup, create
 from escape.oracles.base import scan_outputs
 from escape.procs import Peak, Sampler, SamplerOptions, StatLine
 from escape.schema import OracleSpec
@@ -454,3 +457,74 @@ def test_sink_waits_for_an_http_body_sent_separately(dirs: CaseDirs) -> None:
         assert oracle.check(dirs, evidence()).observed
     finally:
         oracle.teardown()
+
+
+# --- unix-socket sinks -------------------------------------------------------------------
+
+
+@pytest.fixture
+def short_dirs() -> Iterator[CaseDirs]:
+    # sun_path is 108 bytes; keep the case directory short so the sink path fits.
+    root = Path(tempfile.mkdtemp(prefix="cv-", dir="/tmp"))
+    try:
+        yield CaseDirs.create(root)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_unix_stream_sink(short_dirs: CaseDirs) -> None:
+    oracle = make("network-sink", family="unix", protocol="stream")
+    setup = oracle.setup(short_dirs)
+    try:
+        path = str(setup.variables["SINK_PATH"])
+        assert Path(path).parent == short_dirs.outside
+        assert not oracle.check(short_dirs, evidence()).observed
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.connect(path)
+            conn.sendall(b"hello")
+        observation = oracle.check(short_dirs, evidence())
+        assert observation.observed
+        assert "unix" in observation.evidence
+    finally:
+        oracle.teardown()
+
+
+def test_unix_datagram_sink(short_dirs: CaseDirs) -> None:
+    oracle = make("network-sink", family="unix", protocol="datagram")
+    setup = oracle.setup(short_dirs)
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+            sock.sendto(b"hello", str(setup.variables["SINK_PATH"]))
+        assert oracle.check(short_dirs, evidence()).observed
+    finally:
+        oracle.teardown()
+
+
+def test_abstract_unix_sink(short_dirs: CaseDirs) -> None:
+    oracle = make("network-sink", family="unix-abstract", protocol="stream")
+    setup = oracle.setup(short_dirs)
+    try:
+        name = str(setup.variables["SINK_ABSTRACT"])
+        assert "\0" not in name  # the case adds the leading NUL itself
+        assert not oracle.check(short_dirs, evidence()).observed
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+            conn.connect("\0" + name)
+        assert oracle.check(short_dirs, evidence()).observed
+    finally:
+        oracle.teardown()
+
+
+@pytest.mark.parametrize(
+    ("family", "protocol"),
+    [("unix", "tcp"), ("unix-abstract", "udp"), ("ipv4", "stream"), ("ipv6", "datagram")],
+)
+def test_sink_family_and_protocol_must_match(family: str, protocol: str) -> None:
+    with pytest.raises(OracleConfigError, match="takes protocol"):
+        make("network-sink", family=family, protocol=protocol)
+
+
+def test_unix_sink_refuses_a_path_too_long_for_sun_path(tmp_path: Path) -> None:
+    deep = tmp_path / ("d" * 100)
+    oracle = make("network-sink", family="unix", protocol="stream")
+    with pytest.raises(RuntimeError, match="too long"):
+        oracle.setup(CaseDirs.create(deep))

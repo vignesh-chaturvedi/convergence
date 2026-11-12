@@ -11,7 +11,7 @@ from escape import seal
 from escape.expand import UnknownVariable, expand, expand_policy_variables, expand_string
 from escape.oracles import ORACLES, OracleConfigError, create
 from escape.schema import ATTACK_CATEGORIES, CaseError, OracleSpec, load_case, load_dir
-from escape.score import Rate, Result, escape_rate, false_denial_rate, score, wilson
+from escape.score import FAILING, Rate, Result, escape_rate, false_denial_rate, score, wilson
 
 REPO = Path(__file__).resolve().parent.parent
 CONTROLS = sorted((REPO / "controls").glob("*.yaml"))
@@ -76,6 +76,16 @@ def test_duplicate_ids_are_refused(tmp_path: Path) -> None:
         load_dir(tmp_path)
 
 
+def test_requires_accepts_known_preconditions_only(tmp_path: Path) -> None:
+    ok = CONTROL + "platforms: {requires: [unprivileged-userns, legacy-tiocsti]}\n"
+    assert load_case(write(tmp_path, ok)).platforms.requires == (
+        "unprivileged-userns",
+        "legacy-tiocsti",
+    )
+    with pytest.raises(CaseError, match="requires"):
+        load_case(write(tmp_path, CONTROL + "platforms: {requires: [root-shell]}\n"))
+
+
 def test_every_repository_control_loads() -> None:
     cases = load_dir(REPO / "controls")
     assert len(cases) >= 10
@@ -136,29 +146,53 @@ def test_policy_variables_for_the_unconfined_launcher() -> None:
 
 
 @pytest.mark.parametrize(
-    ("is_control", "launcher", "observed", "min_abi", "abi", "expected"),
+    ("is_control", "launcher", "observed", "reached", "min_abi", "abi", "expected"),
     [
-        (False, "unconfined", True, 0, 4, Result.VALID),
-        (False, "unconfined", False, 0, 4, Result.INVALID),
-        (True, "unconfined", True, 0, 4, Result.VALID),
-        (True, "unconfined", False, 0, 4, Result.INVALID),
-        (False, "convergence", False, 0, 4, Result.PASS),
-        (False, "convergence", True, 0, 4, Result.ESCAPE),
-        (False, "convergence", True, 6, 4, Result.DOCUMENTED_LIMITATION),
-        (False, "convergence", True, 6, 8, Result.ESCAPE),
-        (False, "convergence", False, 6, 4, Result.PASS),
-        (False, "convergence", True, 4, None, Result.DOCUMENTED_LIMITATION),
-        (True, "convergence", True, 0, 4, Result.PASS),
-        (True, "convergence", False, 0, 4, Result.FALSE_DENIAL),
+        # Unconfined: attacks must escape *and* announce they reached the attempt.
+        (False, "unconfined", True, True, 0, 4, Result.VALID),
+        (False, "unconfined", True, False, 0, 4, Result.INVALID),
+        (False, "unconfined", False, True, 0, 4, Result.INVALID),
+        (True, "unconfined", True, False, 0, 4, Result.VALID),  # controls ignore the marker
+        (True, "unconfined", False, False, 0, 4, Result.INVALID),
+        # Convergence: containment counts only if the attack reached its attempt.
+        (False, "convergence", False, True, 0, 4, Result.PASS),
+        (False, "convergence", False, False, 0, 4, Result.NOT_REACHED),
+        # An escape is an escape, marker or not: the marker can never excuse one.
+        (False, "convergence", True, False, 0, 4, Result.ESCAPE),
+        (False, "convergence", True, True, 0, 4, Result.ESCAPE),
+        (False, "convergence", True, True, 6, 4, Result.DOCUMENTED_LIMITATION),
+        (False, "convergence", True, True, 6, 8, Result.ESCAPE),
+        (False, "convergence", False, True, 6, 4, Result.PASS),
+        (False, "convergence", True, True, 4, None, Result.DOCUMENTED_LIMITATION),
+        (True, "convergence", True, False, 0, 4, Result.PASS),
+        (True, "convergence", False, False, 0, 4, Result.FALSE_DENIAL),
     ],
 )
 def test_score(
-    is_control: bool, launcher: str, observed: bool, min_abi: int, abi: int | None, expected: Result
+    is_control: bool,
+    launcher: str,
+    observed: bool,
+    reached: bool,
+    min_abi: int,
+    abi: int | None,
+    expected: Result,
 ) -> None:
     got = score(
-        is_control=is_control, launcher=launcher, observed=observed, min_abi=min_abi, kernel_abi=abi
+        is_control=is_control,
+        launcher=launcher,
+        observed=observed,
+        reached=reached,
+        min_abi=min_abi,
+        kernel_abi=abi,
     )
     assert got is expected
+
+
+def test_not_reached_and_not_testable_are_handled_honestly() -> None:
+    assert Result.NOT_REACHED in FAILING  # never a silent pass
+    assert Result.NOT_TESTABLE not in FAILING  # the host's doing, not the case's
+    # Neither counts toward the escape rate in either direction.
+    assert escape_rate([Result.NOT_REACHED, Result.NOT_TESTABLE, Result.PASS]) == Rate(0, 1)
 
 
 def test_wilson_matches_published_intervals() -> None:

@@ -47,13 +47,47 @@ def _validate(args: argparse.Namespace) -> int:
     return EXIT_OK if report.valid else EXIT_FAILED
 
 
+def _explain_run(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from convergence.generate.explain import (
+        explain_run,
+        find_record,
+        load_record,
+        render_text,
+        to_json,
+    )
+    from convergence.policy.load import PolicyError, load_policy
+    from convergence.runtime.record import runs_dir
+
+    try:
+        record = load_record(find_record(args.run, runs_dir()))
+    except (OSError, ValueError) as exc:
+        _say(str(exc))
+        return EXIT_FAILED
+    policy = None
+    source = Path(record.policy.path)
+    try:
+        current = hashlib.sha256(source.read_bytes()).hexdigest()
+        policy = load_policy(source)
+        note = (
+            f"policy {source} (unchanged since the run)"
+            if current == record.policy.sha256
+            else f"policy {source} CHANGED since the run; suggestions are against the current file"
+        )
+    except (OSError, PolicyError):
+        note = f"policy {source} is no longer readable; suggestions cannot show current values"
+    explanations = explain_run(record, policy)
+    if args.json:
+        sys.stdout.write(to_json(record, explanations) + "\n")
+    else:
+        sys.stdout.write(render_text(record, explanations, note))
+    return EXIT_OK
+
+
 def _explain(args: argparse.Namespace) -> int:
     if args.run is not None:
-        sys.stderr.write(
-            "convergence explain --run is not implemented yet: denial explanations arrive with "
-            "observe mode (Phase 5 in PLAN.md).\n"
-        )
-        return EXIT_USAGE
+        return _explain_run(args)
 
     from convergence.policy import enforce
     from convergence.policy.load import PolicyError, load_policy
@@ -291,12 +325,16 @@ def build_parser() -> argparse.ArgumentParser:
             "With --policy: show, rule by rule, how this kernel would enforce the policy, and "
             "which rules it cannot fully enforce. Capabilities come from the same live probes "
             "as `doctor`, unless --assume-abi is given. Exits 3 if any rule is not fully "
-            "enforceable."
+            "enforceable. With --run: for each denial a traced run recorded, show the cause, "
+            "the rule that decided it, the smallest policy change that would permit it, and "
+            "its risk. Nothing is ever changed."
         ),
     )
     target = explain.add_mutually_exclusive_group(required=True)
     target.add_argument("--policy", help="policy file (YAML or JSON)")
-    target.add_argument("--run", help="a run id (not implemented yet: Phase 5)")
+    target.add_argument(
+        "--run", metavar="ID", help="a run id or record file: explain its denials (see run --trace)"
+    )
     explain.add_argument(
         "--assume-abi",
         type=int,

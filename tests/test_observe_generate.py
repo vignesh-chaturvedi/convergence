@@ -16,10 +16,19 @@ from pathlib import Path
 import pytest
 
 from convergence.generate.elf import elf_interpreter, shebang_interpreter
+from convergence.generate.explain import Explanation, explain_run, render_text
 from convergence.generate.policy import collapse_candidate, generate, render
 from convergence.observe.model import Event, Observation
 from convergence.observe.trace import Collector, parse_line
 from convergence.policy.load import parse_policy
+from convergence.runtime.record import (
+    Denial,
+    KernelInfo,
+    Outcome,
+    PolicyRef,
+    RunRecord,
+    Tracing,
+)
 from convergence.runtime.tracer import find_strace
 
 PYTHON = str(Path(shutil.which("python3", path="/usr/bin:/bin") or "/usr/bin/python3").resolve())
@@ -163,10 +172,9 @@ def test_runtime_trees_collapse_with_a_count(tree: Path) -> None:
     events = [ev(i + 1, "read", f) for i, f in enumerate(files)]
     events.append(ev(20, "read", "/usr/share/zoneinfo/UTC"))
     generated = generate(observation(events, tree))
-    assert generated.policy["filesystem"]["read"] == [
-        "/usr/lib/python3.12",
-        "/usr/share/zoneinfo/UTC",
-    ]
+    # Paths missing on this host are kept as optional entries (Ubuntu 26.04 has no 3.12).
+    read = [e if isinstance(e, str) else e["path"] for e in generated.policy["filesystem"]["read"]]
+    assert read == ["/usr/lib/python3.12", "/usr/share/zoneinfo/UTC"]
     reason = next(r for r in generated.reasons if r.value == "/usr/lib/python3.12")
     assert reason.why == "6 files read under /usr/lib/python3.12"
     assert reason.events == ["e1", "e2", "e3", "e4", "e5", "e6"]
@@ -307,7 +315,8 @@ def test_observe_generate_run(tmp_path: Path) -> None:
     assert made.returncode == 0, made.stderr
     text = (work / "p.yaml").read_text()
     assert '"${CWD}/out"' in text
-    assert "/usr/bin/wc" in text
+    # The real path: on Ubuntu 26.04 that is the Rust coreutils multi-call binary.
+    assert os.path.realpath("/usr/bin/wc") in text
     assert json.loads((work / "r.json").read_text())["schema"] == "convergence.rationale/1"
 
     (work / "out" / "result.json").unlink()
@@ -323,3 +332,87 @@ def test_observe_generate_run(tmp_path: Path) -> None:
     )  # fmt: skip
     assert other.returncode != 0
     assert "Permission denied" in other.stderr
+
+
+# --- explain --run ------------------------------------------------------------------------
+
+
+def record_with(*denials: Denial) -> RunRecord:
+    return RunRecord(
+        id="r1",
+        convergence_version="0",
+        started_at="2026-11-12T00:00:00Z",
+        command=["tool"],
+        cwd="/w",
+        policy=PolicyRef(path="/w/p.yaml", sha256="0", name=None),
+        kernel=KernelInfo(release="6.8", machine="aarch64", landlock_abi=4),
+        outcome=Outcome(status="exited", convergence_exit_code=1),
+        tracing=Tracing(requested=True, active=True),
+        denials=list(denials),
+    )
+
+
+POLICY = parse_policy(
+    "version: 1\nnetwork: {tcp_connect: [443]}\nsyscalls: {deny: [chmod]}\n"
+    "resources: {max_processes: 4}\n"
+)
+
+
+def explain_one(denial: Denial) -> Explanation:
+    items = explain_run(record_with(denial), POLICY)
+    assert len(items) == 1
+    return items[0]
+
+
+def test_explain_a_read_denial() -> None:
+    item = explain_one(
+        Denial(7, "openat", "EACCES", "landlock-filesystem", "filesystem.read", "/etc/passwd", "")
+    )
+    assert item.rule == "no grant in filesystem.read covers /etc/passwd"
+    assert item.change is not None
+    assert '+    - "/etc/passwd"' in item.change
+    assert item.risk == "grants read on /etc/passwd only"
+
+
+def test_explain_a_create_needs_the_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", "/home/u")
+    item = explain_one(
+        Denial(7, "mkdirat", "EACCES", "landlock-filesystem", "filesystem.write", "/home/u/new", "")
+    )
+    assert item.change is not None
+    assert '+    - "/home/u"' in item.change
+    assert "under your home directory" in item.risk
+    assert "create, delete, and rename anything under /home/u" in item.risk
+
+
+def test_explain_network_seccomp_and_limits() -> None:
+    port = explain_one(
+        Denial(7, "connect", "EACCES", "landlock-network", "network.tcp_connect", "port 80", "")
+    )
+    assert port.change is not None
+    assert "+    - 80" in port.change
+    assert "every host" in port.risk
+    builtin = explain_one(Denial(7, "unshare", "EPERM", "seccomp", "syscalls (deny list)", "", ""))
+    assert builtin.change is None
+    assert "built-in deny list" in builtin.rule
+    own = explain_one(Denial(7, "chmod", "EPERM", "seccomp", "syscalls (deny list)", "", ""))
+    assert own.change is not None
+    assert '-    - "chmod"' in own.change
+    limit = explain_one(Denial(7, "clone", "EAGAIN", "rlimit", "resources.max_processes", "", ""))
+    assert limit.change is not None
+    assert "+  max_processes: 8" in limit.change
+
+
+def test_identical_denials_are_merged() -> None:
+    denial = Denial(7, "openat", "EACCES", "landlock-filesystem", "filesystem.read", "/x", "")
+    other = Denial(8, "openat", "EACCES", "landlock-filesystem", "filesystem.read", "/x", "")
+    items = explain_run(record_with(denial, other), POLICY)
+    assert len(items) == 1
+    assert items[0].count == 2
+    assert items[0].pids == [7, 8]
+
+
+def test_an_untraced_run_says_how_to_get_denials() -> None:
+    record = record_with()
+    record.tracing = Tracing(requested=False, active=False)
+    assert "--trace" in render_text(record, [], "policy p.yaml")

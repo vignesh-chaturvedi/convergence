@@ -81,7 +81,7 @@ def test_explain_invalid_policy(tmp_path: Path) -> None:
     assert "unsupported policy version 2" in result.stderr
 
 
-def test_explain_run_is_not_implemented_yet() -> None:
-    result = cli("explain", "--run", "abc")
-    assert result.returncode == 2
-    assert "Phase 5" in result.stderr
+def test_explain_run_needs_an_existing_record() -> None:
+    result = cli("explain", "--run", "no-such-run-id")
+    assert result.returncode == 1
+    assert "no run record 'no-such-run-id'" in result.stderr

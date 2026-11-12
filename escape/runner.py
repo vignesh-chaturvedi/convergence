@@ -31,6 +31,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from convergence.kernel import landlock as ll
 from convergence.policy.load import PolicyError, parse_policy
 from escape import report, seal
@@ -52,6 +54,7 @@ SETS = {
     "controls": REPO / "controls",
 }
 HOLDOUT_LOG = REPO / "escape" / "holdout-runs.jsonl"
+KNOWN_LIMITATIONS = REPO / "escape" / "known-limitations.yaml"
 STDERR_TAIL = 600
 
 
@@ -92,6 +95,7 @@ class Runner:
         preconditions: Iterable[Precondition] = (),
     ) -> None:
         self.launcher = launcher
+        self.known_limitations = load_known_limitations()
         self.abi = kernel_abi()
         self.python = _python()
         self._caps: Any = None
@@ -251,7 +255,15 @@ class Runner:
                 min_abi=case.expect.min_abi,
                 kernel_abi=self.abi,
             )
+            if (
+                result.result is Result.ESCAPE
+                and set_name != "holdout"
+                and case.id in self.known_limitations
+            ):
+                result.result = Result.KNOWN_LIMITATION
             result.evidence = observation.evidence
+            if result.result is Result.KNOWN_LIMITATION:
+                result.evidence += f"; known limitation: {self.known_limitations[case.id]}"
             if not case.is_control and not reached:
                 result.evidence += (
                     "; the payload never emitted ${REACHED}, so it may have been stopped before "
@@ -278,6 +290,19 @@ class Runner:
             reap_zombie_children(known=set())
             _remove_tree(root)
         return result
+
+
+def load_known_limitations(path: Path = KNOWN_LIMITATIONS) -> dict[str, str]:
+    """Case id -> where it is documented. Every entry must name its documentation."""
+    if not path.exists():
+        return {}
+    entries = yaml.safe_load(path.read_text()) or []
+    known: dict[str, str] = {}
+    for entry in entries:
+        if not (entry.get("id") and entry.get("reason") and entry.get("documented")):
+            raise CaseError(str(path), f"incomplete entry: {entry!r}")
+        known[str(entry["id"])] = str(entry["documented"])
+    return known
 
 
 def _load_sets(names: list[str]) -> list[tuple[str, Path, Case]]:

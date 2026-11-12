@@ -21,6 +21,18 @@ All notable changes to this project are recorded here. The format follows
   supervisor (`PR_SET_PDEATHSIG`). Core dumps are disabled.
 - Run records (`convergence.run/1`, `schemas/run-v1.json`), saved privately under
   `$XDG_STATE_HOME/convergence/runs/`.
+- `convergence run --trace`: denial capture with strace (ADR 0007). The tool names the
+  supervisor as its tracer and waits until strace has attached. strace runs in its own
+  session with `no_new_privs` and a seccomp filter (no sockets, no denied syscalls beyond
+  `ptrace` and `process_vm_readv`). Each failed operation is attributed to Landlock
+  filesystem or network, seccomp, an rlimit, or the deadline, or recorded as
+  `unattributed`. Tracing is opt-in, not the default the plan proposed: strace parses memory
+  the tool controls while holding the user's file access. If strace is missing or cannot
+  attach, the run goes on untraced and the record says why.
+- `escape/known-limitations.yaml`: development cases that escape by design, each with its
+  reason and THREAT_MODEL.md section. They are reported as `known-limitation`, count in the
+  escape rate, and do not fail the run; the list never applies to the holdout. The CI escape
+  job's confined run is now required.
 - ADR 0006: the spawn model. The ruleset and seccomp programs are built in the parent, and
   the child applies them in a fixed order. Its last steps (rlimits, seccomp, `execve`) use
   only prebuilt objects, because a small `RLIMIT_DATA` would make any allocation fail.

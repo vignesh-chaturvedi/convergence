@@ -16,8 +16,12 @@ import argparse
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from convergence import __version__
+
+if TYPE_CHECKING:
+    from convergence.runtime.record import RunRecord
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -102,6 +106,7 @@ def _run(args: argparse.Namespace) -> int:
         keep=args.max_output,
         policy_path=str(policy_path.resolve()),
         policy_text=policy_text,
+        trace=args.trace,
     )
 
     plan: Plan | None = None
@@ -135,6 +140,7 @@ def _run(args: argparse.Namespace) -> int:
         _say(f"stopped the tool at the wall-clock limit ({record.duration_seconds:.1f} s)")
     if outcome.descendants_killed:
         _say(f"killed {outcome.descendants_killed} process(es) the tool left running")
+    _report_denials(record)
     if not args.no_record:
         try:
             run_record.save(record)
@@ -143,6 +149,22 @@ def _run(args: argparse.Namespace) -> int:
     if args.json:
         sys.stdout.write(record.to_json() + "\n")
     return outcome.convergence_exit_code
+
+
+def _report_denials(record: RunRecord) -> None:
+    tracing = record.tracing
+    if tracing.requested and not tracing.active:
+        _say(f"--trace: no denial capture for this run ({tracing.detail or 'unknown reason'})")
+    shown = [d for d in record.denials if d.mechanism != "timeout"]
+    if not tracing.active or not shown:
+        return
+    _say(f"{record.denials_total} denied operation(s) seen; the first ones:")
+    for denial in shown[:10]:
+        what = " ".join(x for x in (denial.syscall, denial.target) if x)
+        rule = f" ({denial.rule})" if denial.rule else ""
+        sys.stderr.write(f"  {denial.mechanism}: {what} -> {denial.errno}{rule}\n")
+    if record.denials_total > 10:
+        sys.stderr.write("  ... all of them are in the run record\n")
 
 
 def _positive_float(text: str) -> float:
@@ -259,6 +281,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="bytes of each output stream kept in the run record (default: 1 MiB)",
     )
     run.add_argument("--no-record", action="store_true", help="do not save the run record")
+    run.add_argument(
+        "--trace",
+        action="store_true",
+        help=(
+            "record which rule denied each failed operation, using strace (slower; strace "
+            "runs outside the sandbox, see ADR 0007)"
+        ),
+    )
     run.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
     run.set_defaults(handler=_run)
     return parser

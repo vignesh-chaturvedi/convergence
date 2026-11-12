@@ -43,6 +43,7 @@ from convergence.policy.rights import rights_for
 from convergence.runtime.plan import LandlockPlan
 
 EXIT_SETUP_FAILED = 125
+PR_SET_PTRACER = 0x59616D61  # Yama: name a process (and its descendants) as allowed tracer
 REPORT = struct.Struct("=ii")  # step, errno
 
 
@@ -58,6 +59,7 @@ class Step(enum.IntEnum):
     RLIMITS = 9
     SECCOMP = 10
     EXEC = 11
+    TRACE = 12
 
 
 class _Rlimit(ctypes.Structure):
@@ -82,6 +84,8 @@ class ChildSetup:
     stderr_fd: int
     report_fd: int
     supervisor_pid: int
+    trace_ack_fd: int | None = None  # set when a tracer will attach (ADR 0007)
+    trace_go_fd: int | None = None
     _keep: list[object] = field(default_factory=list)
 
 
@@ -106,6 +110,7 @@ def prepare_child(
     stdout_fd: int,
     stderr_fd: int,
     report_fd: int,
+    trace_fds: tuple[int, int] | None = None,
 ) -> ChildSetup:
     argv_bytes = [os.fsencode(a) for a in argv]
     env_bytes = [os.fsencode(k) + b"=" + os.fsencode(v) for k, v in env.items()]
@@ -135,6 +140,8 @@ def prepare_child(
         stderr_fd=stderr_fd,
         report_fd=report_fd,
         supervisor_pid=os.getpid(),
+        trace_ack_fd=trace_fds[0] if trace_fds else None,
+        trace_go_fd=trace_fds[1] if trace_fds else None,
         _keep=[argv_bytes, env_bytes],
     )
 
@@ -145,7 +152,7 @@ def set_nproc(setup: ChildSetup, which: int, value: int) -> None:
     setup.rlimits.append((which, struct_, ctypes.addressof(struct_)))
 
 
-def _restore_signals() -> None:
+def restore_signals() -> None:
     for sig in signal.valid_signals():
         if sig in (signal.SIGKILL, signal.SIGSTOP):
             continue
@@ -173,7 +180,7 @@ def _restrict(plan: LandlockPlan) -> None:
     plan.ruleset.restrict_self()
 
 
-def _cloexec_all() -> None:
+def cloexec_all() -> None:
     try:
         syscall(
             SYS_CLOSE_RANGE,
@@ -199,7 +206,7 @@ def run_child(setup: ChildSetup) -> NoReturn:
         gc.disable()
         os.setsid()
         step = Step.SIGNALS
-        _restore_signals()
+        restore_signals()
         step = Step.STDIO
         for source, target in ((setup.stdin_fd, 0), (setup.stdout_fd, 1), (setup.stderr_fd, 2)):
             if source != target:
@@ -211,13 +218,23 @@ def run_child(setup: ChildSetup) -> NoReturn:
         prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
         if os.getppid() != setup.supervisor_pid:
             raise ProcessLookupError("the supervisor exited before the tool started")
+        step = Step.TRACE
+        if setup.trace_ack_fd is not None and setup.trace_go_fd is not None:
+            # Let the supervisor's tracer attach, wait until it has, then withdraw the
+            # permission: children the tool forks are traced without it.
+            with contextlib.suppress(OSError):
+                prctl(PR_SET_PTRACER, setup.supervisor_pid)
+            os.write(setup.trace_ack_fd, b"R")
+            os.read(setup.trace_go_fd, 1)  # end of file also continues: tracing is optional
+            with contextlib.suppress(OSError):
+                prctl(PR_SET_PTRACER, 0)
         step = Step.NO_NEW_PRIVS
         set_no_new_privs()
         step = Step.LANDLOCK
         if setup.landlock is not None:
             _restrict(setup.landlock)
         step = Step.CLOSE_FDS
-        _cloexec_all()
+        cloexec_all()
 
         # Nothing below may allocate.
         lib = libc()

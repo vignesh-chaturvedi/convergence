@@ -247,3 +247,18 @@ def build_programs(policy: Policy, landlock_abi: int, library: sc.Library) -> Pr
         allow_list, more = _allow_list(library, policy)
         skipped += more
     return Programs(baseline=baseline, allow_list=allow_list, skipped=sorted(set(skipped)))
+
+
+# The tracer (ADR 0007) needs these from the built-in deny list; it gets nothing else.
+TRACER_NEEDS = frozenset({"ptrace", "process_vm_readv"})
+
+
+def build_tracer_program(library: sc.Library) -> bytes:
+    """The filter strace runs under: the built-in deny list minus what tracing needs, and no
+    sockets at all."""
+    builder = _Builder(library, sc.ACT_ALLOW)
+    for item in DENIED_SYSCALLS:
+        if item.name not in TRACER_NEEDS:
+            builder.rule(sc.act_errno(item.errno), item.name, known=True)
+    builder.rule(sc.act_errno(errno.EPERM), "socket", known=True)
+    return builder.compile()

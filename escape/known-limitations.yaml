@@ -1,0 +1,16 @@
+# Development attacks that escape Convergence by design.
+#
+# Each entry names the case, why nothing in Convergence's design can stop it, and the
+# THREAT_MODEL.md section that documents it for users. Under `convergence run` such a case
+# is reported as `known-limitation`: it still counts in the escape rate, but it does not
+# fail the run, so the CI escape job can be required. The holdout never uses this list; its
+# result is reported exactly as it comes out.
+#
+# Adding an entry needs the same evidence as any other claim: the documentation first.
+- id: exec-via-loader-001
+  reason: >-
+    The dynamic loader must be granted execute for any dynamically linked program to run,
+    and running it on a file the tool can only read maps that file as executable code.
+    Landlock checks execute rights when the kernel starts a program, not on memory mapped
+    as executable.
+  documented: "THREAT_MODEL.md: Residual risks even when everything is enforced"

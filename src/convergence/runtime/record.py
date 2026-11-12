@@ -49,6 +49,26 @@ class Usage:
 
 
 @dataclass(slots=True)
+class Denial:
+    """One failed operation and the mechanism that caused it (ADR 0007)."""
+
+    pid: int
+    syscall: str  # or the signal name, for SIGXCPU and SIGXFSZ
+    errno: str
+    mechanism: str  # landlock-filesystem, landlock-network, seccomp, rlimit, unattributed
+    rule: str  # the policy section that decides it, when known
+    target: str  # the path or port involved, when known
+    line: str  # strace's line, truncated
+
+
+@dataclass(slots=True)
+class Tracing:
+    requested: bool
+    active: bool
+    detail: str = ""
+
+
+@dataclass(slots=True)
 class PolicyRef:
     path: str
     sha256: str
@@ -81,6 +101,9 @@ class RunRecord:
     usage: Usage | None = None
     stdout: StreamRecord = field(default_factory=StreamRecord)
     stderr: StreamRecord = field(default_factory=StreamRecord)
+    tracing: Tracing = field(default_factory=lambda: Tracing(requested=False, active=False))
+    denials: list[Denial] = field(default_factory=list)  # at most 500 are kept
+    denials_total: int = 0
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)

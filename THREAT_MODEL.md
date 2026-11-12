@@ -159,6 +159,11 @@ escapes:
   a boundary against running code the tool can read. Everything that runs this way still
   runs inside the same sandbox, so it gains no access the tool did not already have. Grant
   read narrowly if a readable binary would be dangerous to run.
+- **Denial capture runs outside the sandbox.** `convergence run --trace` attaches strace to
+  the tool from outside (ADR 0007). strace decodes memory the tool controls. It runs with
+  `no_new_privs` and a seccomp filter that denies sockets and the dangerous syscalls it does
+  not need, but it keeps the user's file access, so a bug in its decoders could be used to
+  escape. Tracing is off by default, and the escape matrix measures the default.
 - **A supervisor killed with `SIGKILL`.** The tool's first process dies with it
   (`PR_SET_PDEATHSIG`). Processes the tool started are re-parented to the next subreaper or
   to init, and keep running inside the sandbox until they exit. Stopping the supervisor any

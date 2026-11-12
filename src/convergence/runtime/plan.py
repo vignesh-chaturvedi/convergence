@@ -20,10 +20,12 @@ from pathlib import Path
 from convergence.kernel import landlock as ll
 from convergence.kernel import seccomp as sc
 from convergence.kernel.landlock import AccessFs, AccessNet, Scope
+from convergence.policy.baseline import ARGUMENT_RULES, denied_names
 from convergence.policy.enforce import Assessment, Capabilities, RuleAssessment, assess
 from convergence.policy.model import Policy
 from convergence.policy.paths import PathKind, ResolvedPath, Variables, resolve_all
 from convergence.policy.rights import Bucket, handled_rights, names, rights_for
+from convergence.runtime.denials import Context
 from convergence.runtime.filters import FilterError, Programs, build_programs
 
 MIB = 1024 * 1024
@@ -85,6 +87,7 @@ class Plan:
     max_processes: int | None
     scratch: Path | None
     landlock_abi: int | None
+    attribution: Context | None = None
 
     def close(self) -> None:
         if self.landlock is not None:
@@ -270,6 +273,38 @@ def count_user_tasks() -> int:
     return total
 
 
+def attribution_context(policy: Policy, paths: list[ResolvedPath], scratch: Path | None) -> Context:
+    grants: dict[str, list[str]] = {"read": [], "write": [], "execute": []}
+    for item in paths:
+        if item.kind is PathKind.SCRATCH and scratch is not None:
+            grants[item.bucket].append(str(scratch))
+        elif item.real is not None:
+            grants[item.bucket].append(item.real)
+        elif item.kind is PathKind.PROC_SELF and item.expanded:
+            grants[item.bucket].append(item.expanded)
+    res = policy.resources
+    limits = {
+        name
+        for name in (
+            "cpu_seconds",
+            "memory_mb",
+            "address_space_mb",
+            "max_processes",
+            "max_file_size_mb",
+            "max_open_files",
+        )
+        if getattr(res, name) is not None
+    }
+    sys_policy = policy.syscalls
+    return Context(
+        denied_syscalls=denied_names() | frozenset(sys_policy.deny),
+        argument_rules=frozenset(rule.syscall for rule in ARGUMENT_RULES),
+        allow_list=frozenset(sys_policy.allow) if sys_policy.mode == "allow-list" else None,
+        grants={bucket: tuple(values) for bucket, values in grants.items()},
+        limits=frozenset(limits),
+    )
+
+
 def prepare(
     policy: Policy,
     argv: list[str],
@@ -336,6 +371,7 @@ def prepare(
             max_processes=policy.resources.max_processes,
             scratch=scratch,
             landlock_abi=abi,
+            attribution=attribution_context(policy, paths, scratch),
         )
     except BaseException:
         if landlock is not None:

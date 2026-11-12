@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 4 in progress: `convergence run` built; denial capture and the holdout run pending · **Last updated:** 2026-11-12
+**Status:** Phase 4 in progress: `convergence run` and denial capture built; the holdout run pending · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -146,7 +146,7 @@ evidence gathered in that phase can still change the decision.
 | 0004 | Policy schema v1: format, semantics, path resolution, defaults | 2 |
 | 0005 | Escape-matrix design: external oracles, attack validity checks, holdout sealing | 3 |
 | 0006 | Spawn model: ruleset and BPF are built in the parent. The child only runs setsid, rlimits, no-new-privs, `landlock_restrict_self`, seccomp, then exec. Forks happen only from a single-threaded process | 4 |
-| 0007 | Denial capture: failed-syscall tracing with strace (ptrace), outside the enforcement boundary | 4 |
+| 0007 | Denial capture: opt-in failed-syscall tracing with strace (ptrace), outside the enforcement boundary and contained by seccomp | 4 |
 | 0008 | Observation mechanism: strace, compared with seccomp user notification and a hand-written ptrace tracer | 5 |
 | 0009 | Policy generation: exact grants, rules for collapsing to directories, a rationale model, secrets never granted automatically | 5 |
 | 0010 | MCP server design | 6 |
@@ -492,8 +492,19 @@ the baseline report is committed.
   per-process measurements. Two dev cases signalled `${REACHED}` after the step their
   mechanism stops, one lacked a grant its setup needed, and one control's policy missed
   `/bin/sh`.
-- **Pending:** denial capture (ADR 0007); the CI escape job turned required, with documented
-  limitations recorded so that they do not fail it; then the one holdout run.
+- **CI (2026-11-12):** on the Linux 7.0 runners (Ubuntu 24.04 x86_64 and arm64, Ubuntu
+  26.04; Landlock ABI 8), 54 of 55 testable development attacks pass, including the signal
+  case, and every control passes.
+- **Denial capture built (2026-11-12), opt-in rather than default.** strace must run outside
+  the sandbox and decode memory a hostile tool controls, so it is enabled only with
+  `--trace`, and contained by `no_new_privs` and seccomp. Containing it with Landlock too
+  would need strace to be the tool's parent; ADR 0007 records why that was rejected. The
+  default stays the measured configuration.
+- **Known limitations:** `escape/known-limitations.yaml` lists development cases that escape
+  by design, with their THREAT_MODEL.md sections. They are reported as `known-limitation`
+  and still counted in the escape rate. With that, the CI escape job's confined run is
+  required.
+- **Pending:** the one holdout run under Convergence.
 
 **Exit gate:** dev escape rate is 0% or every exception is documented; the controls pass
 under hand-written policies; the holdout result is published; the CI escape job is made
@@ -643,7 +654,7 @@ from the results.
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | done | see git log | |
-| 4 | Runtime enforcement and holdout | in progress: `run` done; denial capture and holdout run pending | | |
+| 4 | Runtime enforcement and holdout | in progress: `run` and denial capture done; holdout run pending | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |
 | 7 | Benchmarks | not started | | |

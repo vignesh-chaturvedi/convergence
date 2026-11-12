@@ -11,7 +11,7 @@ from escape import runner
 from escape.launchers import LAUNCHERS, ConvergenceLauncher, UnconfinedLauncher
 from escape.preconditions import Availability
 from escape.report import CaseResult
-from escape.schema import load_case
+from escape.schema import CaseError, load_case
 from escape.score import Result
 
 pytestmark = pytest.mark.kernel
@@ -188,3 +188,30 @@ def test_missing_host_precondition_is_not_testable(tmp_path: Path) -> None:
 
     case_runner.preconditions["unprivileged-userns"] = Availability(True, "allowed")
     assert case_runner.run_case(path, load_case(path), "dev").result is Result.INVALID
+
+
+def test_known_limitations_are_development_cases_documented_in_the_threat_model() -> None:
+    known = runner.load_known_limitations()
+    assert known, "the list is expected to name at least the dynamic-loader case"
+    dev_ids = {p.stem for p in (runner.SETS["dev"]).glob("*.yaml")}
+    threat_model = (runner.REPO / "THREAT_MODEL.md").read_text()
+    for case_id, documented in known.items():
+        assert case_id in dev_ids, case_id
+        document, _, section = documented.partition(": ")
+        assert document == "THREAT_MODEL.md"
+        assert f"## {section}" in threat_model, section
+
+
+def test_an_incomplete_known_limitation_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / "known.yaml"
+    path.write_text("- id: something-001\n  reason: because\n")
+    with pytest.raises(CaseError, match="incomplete"):
+        runner.load_known_limitations(path)
+
+
+def test_a_known_limitation_counts_as_an_escape_but_does_not_fail() -> None:
+    from escape.score import FAILING, escape_rate
+
+    rate = escape_rate([Result.PASS, Result.PASS, Result.KNOWN_LIMITATION])
+    assert (rate.numerator, rate.denominator) == (1, 3)
+    assert Result.KNOWN_LIMITATION not in FAILING

@@ -9,7 +9,7 @@ Markdown file is generated from its JSON.
 |---|---|---|
 | `validity-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | 45 of the 47 development attacks escape with nothing confining them, and all 10 controls do their job. The other 2 attacks are `not-testable`: this host refuses raw sockets and TIOCSTI before Convergence is involved. This is the validity gate: a case that fails it proves nothing. |
 | `validity-holdout-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | All 26 independently authored holdout attacks escape with nothing confining them. Its cases are sealed by `escape/cases/holdout.sha256`. |
-| `convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The development attacks and controls under `convergence run`: 53 attacks pass, 1 escape (`exec-via-loader-001`, the dynamic-loader limitation in THREAT_MODEL.md), 1 documented limitation (`signal-outside-001`, needs Landlock ABI 6), 2 not testable. All 10 controls pass. Escape rate 1/44, false-denial rate 0/10. |
+| `convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The development attacks and controls under `convergence run`: 53 attacks pass, 1 known limitation (`exec-via-loader-001`, the dynamic-loader case in THREAT_MODEL.md, counted as an escape), 1 documented limitation (`signal-outside-001`, needs Landlock ABI 6), 2 not testable. All 10 controls pass. Escape rate 1/44, false-denial rate 0/10. |
 
 All three were generated on the Lima VM: Ubuntu 24.04.4, stock kernel 6.8.0-134-generic,
 aarch64, Landlock ABI 4. Their `commit` field ends in `+uncommitted` because they were

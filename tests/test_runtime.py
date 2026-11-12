@@ -21,6 +21,7 @@ import pytest
 from convergence.kernel import landlock as ll
 from convergence.kernel import seccomp as sc
 from convergence.policy.load import parse_policy
+from convergence.runtime.denials import Context, attribute_line
 from convergence.runtime.filters import (
     AF_INET,
     AF_INET6,
@@ -31,6 +32,7 @@ from convergence.runtime.filters import (
     SocketGrants,
     build_programs,
 )
+from convergence.runtime.tracer import find_strace
 from escape.oracles.execution import find_loader
 
 pytestmark = pytest.mark.kernel
@@ -528,3 +530,164 @@ def test_an_unenforceable_policy_is_refused_unless_degraded_is_allowed(
     assert allowed.returncode == 0
     assert allowed.stdout.strip() == "ran"
     assert "degraded (unenforceable)" in allowed.stderr
+
+
+# --- denial capture (ADR 0007) ------------------------------------------------------------
+
+needs_strace = pytest.mark.skipif(find_strace() is None, reason="strace is not installed")
+
+DENIED = """
+import os, socket, time
+try:
+    open(os.environ['OUTSIDE'])
+except OSError:
+    pass
+s = socket.socket()
+try:
+    s.connect(('127.0.0.1', 80))
+except OSError:
+    pass
+try:
+    os.unshare(os.CLONE_NEWUSER)
+except OSError:
+    pass
+for _ in range(6):
+    try:
+        if os.fork() == 0:
+            time.sleep(1)
+            os._exit(0)
+    except OSError:
+        pass
+print('done')
+"""
+
+
+@needs_strace
+def test_trace_attributes_each_denial(area: dict[str, Path]) -> None:
+    outside = area["outside"] / "secret.txt"
+    outside.write_text("x")
+    pol = policy(area, network={"tcp_connect": [9]})
+    pol["resources"]["max_processes"] = 2
+    pol["environment"]["set"]["OUTSIDE"] = str(outside)
+    result = run(area, py(DENIED), pol, extra=("--no-record", "--json", "--trace"))
+    record = json.loads(result.stdout)
+    assert record["tracing"] == {"requested": True, "active": True, "detail": ""}
+    assert record["stdout"]["kept"] == "done\n"
+    seen = {(d["mechanism"], d["syscall"], d["rule"], d["target"]) for d in record["denials"]}
+    assert ("landlock-filesystem", "openat", "filesystem.read", str(outside)) in seen
+    assert ("landlock-network", "connect", "network.tcp_connect", "port 80") in seen
+    assert ("seccomp", "unshare", "syscalls (deny list)", "") in seen
+    assert any(m == "rlimit" and r == "resources.max_processes" for m, _, r, _ in seen)
+
+
+@needs_strace
+def test_tracing_does_not_change_what_the_tool_can_do(area: dict[str, Path]) -> None:
+    outside = area["outside"] / "secret.txt"
+    outside.write_text("x")
+    code = f"import errno\n{errno_of(f'open({str(outside)!r})')}"
+    plain = run(area, py("import errno\n" + errno_of(f"open({str(outside)!r})")))
+    traced = run(area, py(code), extra=("--no-record", "--trace"))
+    assert plain.stdout == traced.stdout == "EACCES\n"
+    assert traced.returncode == plain.returncode == 0
+
+
+def test_without_strace_the_run_goes_on_untraced(
+    area: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from convergence.runtime import tracer
+
+    monkeypatch.setattr(tracer, "STRACE_CANDIDATES", ("/no/such/strace",))
+    assert tracer.Tracer.prepare() == (None, "strace is not installed")
+
+
+CONTEXT = Context(
+    denied_syscalls=frozenset({"unshare", "ptrace"}),
+    argument_rules=frozenset({"socket", "clone"}),
+    allow_list=None,
+    grants={"read": ("/usr",), "write": ("/work/out",), "execute": ("/usr/bin/python3",)},
+    limits=frozenset({"max_processes", "max_open_files", "cpu_seconds", "memory_mb"}),
+)
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        (
+            'openat(AT_FDCWD</work>, "/home/u/.ssh/id_rsa", O_RDONLY) = -1 EACCES (Permission denied)',  # noqa: E501 - strace's line, verbatim
+            ("landlock-filesystem", "filesystem.read", "/home/u/.ssh/id_rsa"),
+        ),
+        (
+            'openat(AT_FDCWD</work/out>, "f.txt", O_WRONLY|O_CREAT, 0644) = -1 EACCES (Permission denied)',  # noqa: E501 - strace's line, verbatim
+            ("unattributed", "filesystem.write", "/work/out/f.txt"),
+        ),
+        (
+            'execve("/usr/bin/curl", ["curl"], 0x7ffd /* 3 vars */) = -1 EACCES (Permission denied)',  # noqa: E501 - strace's line, verbatim
+            ("landlock-filesystem", "filesystem.execute", "/usr/bin/curl"),
+        ),
+        (
+            "connect(3<TCP:[123]>, {sa_family=AF_INET, sin_port=htons(443), "
+            'sin_addr=inet_addr("1.2.3.4")}, 16) = -1 EACCES (Permission denied)',
+            ("landlock-network", "network.tcp_connect", "port 443"),
+        ),
+        (
+            "bind(3<UDP:[9]>, {sa_family=AF_INET6, sin6_port=htons(53)}, 28) = -1 EACCES (Permission denied)",  # noqa: E501 - strace's line, verbatim
+            ("landlock-network", "network.udp_bind", "port 53"),
+        ),
+        (
+            "unshare(CLONE_NEWUSER) = -1 EPERM (Operation not permitted)",
+            ("seccomp", "syscalls (deny list)", ""),
+        ),
+        (
+            "socket(AF_NETLINK, SOCK_RAW, 0) = -1 EPERM (Operation not permitted)",
+            ("seccomp", "syscalls (argument rule on socket)", ""),
+        ),
+        ("setuid(0) = -1 EPERM (Operation not permitted)", ("unattributed", "", "")),
+        (
+            "clone(child_stack=NULL, flags=SIGCHLD) = -1 EAGAIN (Resource temporarily unavailable)",
+            ("rlimit", "resources.max_processes", ""),
+        ),
+        (
+            'openat(AT_FDCWD, "x", O_RDONLY) = -1 EMFILE (Too many open files)',
+            ("rlimit", "resources.max_open_files", ""),
+        ),
+        (
+            "mmap(NULL, 268439552, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = -1 ENOMEM (Cannot allocate memory)",  # noqa: E501 - strace's line, verbatim
+            ("rlimit", "resources.memory_mb", ""),
+        ),
+        (
+            "--- SIGXCPU {si_signo=SIGXCPU, si_code=SI_KERNEL} ---",
+            ("rlimit", "resources.cpu_seconds", ""),
+        ),
+    ],
+)
+def test_attribution(line: str, expected: tuple[str, str, str]) -> None:
+    denial = attribute_line(line, 7, CONTEXT)
+    assert denial is not None
+    assert (denial.mechanism, denial.rule, denial.target) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'openat(AT_FDCWD, "/nope", O_RDONLY) = -1 ENOENT (No such file or directory)',
+        "read(3<pipe:[1]>, 0x7f, 4096) = -1 EAGAIN (Resource temporarily unavailable)",
+        'faccessat2(AT_FDCWD, "/etc/shadow", R_OK, 0) = -1 EACCES (Permission denied)',
+        "--- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED} ---",
+        "openat(AT_FDCWD, ...) = 3</usr/lib/libc.so.6>",
+    ],
+)
+def test_ordinary_failures_are_not_denials(line: str) -> None:
+    assert attribute_line(line, 7, CONTEXT) is None
+
+
+def test_allow_list_denials_are_attributed() -> None:
+    context = Context(
+        denied_syscalls=frozenset(),
+        argument_rules=frozenset(),
+        allow_list=frozenset({"read", "write"}),
+        grants={},
+        limits=frozenset(),
+    )
+    denial = attribute_line("getpid() = -1 EPERM (Operation not permitted)", 1, context)
+    assert denial is not None
+    assert (denial.mechanism, denial.rule) == ("seccomp", "syscalls.allow")

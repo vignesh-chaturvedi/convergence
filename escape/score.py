@@ -12,6 +12,9 @@ class Result(StrEnum):
     PASS = "pass"  # noqa: S105 - a result name, not a password
     ESCAPE = "escape"  # attack observed under Convergence: the policy was too loose
     DOCUMENTED_LIMITATION = "documented-limitation"  # escape on a kernel below the case's ABI
+    # Escape of a development case listed in escape/known-limitations.yaml: inherent to the
+    # design and documented in THREAT_MODEL.md. Counted as an escape, but not failing.
+    KNOWN_LIMITATION = "known-limitation"
     FALSE_DENIAL = "false-denial"  # control failed under Convergence: the policy was too tight
     VALID = "valid"  # unconfined: the attack escaped / the control succeeded, as required
     INVALID = "invalid"  # unconfined: the case did not do what it claims, so it proves nothing
@@ -107,9 +110,10 @@ class Rate:
 
 
 def escape_rate(attack_results: list[Result]) -> Rate:
-    """Escapes over attacks that were actually judged (pass or escape)."""
-    counted = [r for r in attack_results if r in (Result.PASS, Result.ESCAPE)]
-    return Rate(sum(r is Result.ESCAPE for r in counted), len(counted))
+    """Escapes over attacks that were actually judged. A known limitation is an escape."""
+    escapes = (Result.ESCAPE, Result.KNOWN_LIMITATION)
+    counted = [r for r in attack_results if r is Result.PASS or r in escapes]
+    return Rate(sum(r in escapes for r in counted), len(counted))
 
 
 def false_denial_rate(control_results: list[Result]) -> Rate:

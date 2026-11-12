@@ -24,6 +24,7 @@ from convergence import __version__
 from convergence.kernel._libc import PR_SET_CHILD_SUBREAPER, prctl
 from convergence.runtime import child as child_mod
 from convergence.runtime.child import REPORT, Step
+from convergence.runtime.denials import read_trace
 from convergence.runtime.plan import (
     EXIT_CANNOT_EXECUTE,
     EXIT_NOT_FOUND,
@@ -34,15 +35,18 @@ from convergence.runtime.plan import (
     count_user_tasks,
 )
 from convergence.runtime.record import (
+    Denial,
     KernelInfo,
     Outcome,
     PolicyRef,
     RunRecord,
     StreamRecord,
+    Tracing,
     Usage,
     new_run_id,
     now_iso,
 )
+from convergence.runtime.tracer import Tracer
 
 RELAY_THREADS = 2  # stdout and stderr; they count towards RLIMIT_NPROC like any task
 DEFAULT_KEEP = 1024 * 1024  # bytes of each stream kept in the run record
@@ -118,17 +122,18 @@ def own_children() -> list[int]:
     return sorted(found)
 
 
-def kill_everything(pgid: int) -> int:
+def kill_everything(pgid: int, exclude: frozenset[int] = frozenset()) -> int:
     """Kill the tool's process group and every child of this process. Returns how many died.
 
     Only this process's own children are signalled by pid, and a child's pid cannot be
-    reused before it is reaped, so nothing outside the run can be hit.
+    reused before it is reaped, so nothing outside the run can be hit. ``exclude`` keeps the
+    tracer alive so it can flush its output.
     """
     killed = 0
     for _ in range(10_000):
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(pgid, signal.SIGKILL)
-        children = own_children()
+        children = [pid for pid in own_children() if pid not in exclude]
         if not children:
             break
         for pid in children:
@@ -165,10 +170,10 @@ def _wait_for_exit(pid: int, deadline: float) -> bool:
             os.close(pidfd)
 
 
-def _read_report(fd: int, deadline: float) -> bytes:
+def _read_report(fd: int, deadline: float, max_bytes: int | None = None) -> bytes:
     """Read the child's report pipe until it closes: on exec, or after a failure."""
     data = bytearray()
-    while True:
+    while max_bytes is None or len(data) < max_bytes:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
@@ -211,6 +216,7 @@ class Options:
     policy_path: str = ""
     policy_text: bytes = b""
     policy_name: str | None = None
+    trace: bool = False  # --trace: capture denials with strace (ADR 0007)
 
 
 def _base_record(plan: Plan | None, argv: list[str], options: Options) -> RunRecord:
@@ -269,6 +275,16 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
         raise RunError("the supervisor must be single-threaded when it forks (ADR 0006)")
     prctl(PR_SET_CHILD_SUBREAPER, 1)
 
+    tracer: Tracer | None = None
+    trace_fds: tuple[int, int, int, int] | None = None  # ack_r, ack_w, go_r, go_w
+    if options.trace:
+        tracer, reason = Tracer.prepare()
+        record.tracing = Tracing(requested=True, active=False, detail=reason)
+        if tracer is not None:
+            ack_r, ack_w = os.pipe2(os.O_CLOEXEC)
+            go_r, go_w = os.pipe2(os.O_CLOEXEC)
+            trace_fds = (ack_r, ack_w, go_r, go_w)
+
     report_r, report_w = os.pipe2(os.O_CLOEXEC)
     out_r, out_w = os.pipe2(os.O_CLOEXEC)
     err_r, err_w = os.pipe2(os.O_CLOEXEC)
@@ -297,9 +313,11 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
         stdout_fd=out_w,
         stderr_fd=err_w,
         report_fd=report_w,
+        trace_fds=(trace_fds[1], trace_fds[2]) if trace_fds else None,
     )
     if plan.max_processes is not None:
-        nproc = count_user_tasks() + 1 + RELAY_THREADS + plan.max_processes
+        helpers = 1 + RELAY_THREADS + (1 if tracer is not None else 0)
+        nproc = count_user_tasks() + helpers + plan.max_processes
         _, hard = resource.getrlimit(resource.RLIMIT_NPROC)
         if hard != resource.RLIM_INFINITY:
             nproc = min(nproc, hard)
@@ -325,6 +343,9 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
             child_mod.run_child(setup)  # never returns
         for fd in (report_w, out_w, err_w):
             os.close(fd)
+        if tracer is not None and trace_fds is not None:
+            _attach_tracer(tracer, pid, trace_fds, deadline, record)
+            trace_fds = None
         report = _read_report(report_r, deadline)
         os.close(report_r)
         if report:
@@ -347,13 +368,25 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
         # A second signal must not interrupt the cleanup: note it and carry on.
         for sig in STOP_SIGNALS:
             signal.signal(sig, lambda _signum, _frame: None)
+        if trace_fds is not None:  # the tool never got as far as the tracer
+            for fd in trace_fds:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+        tracer_pids = frozenset({tracer.pid}) if tracer and tracer.pid else frozenset()
         if pid > 0:
-            descendants = kill_everything(pid)
+            descendants = kill_everything(pid, exclude=tracer_pids)
             if status is None:
                 with contextlib.suppress(ChildProcessError):
                     _, status, _ = os.wait4(pid, 0)
         else:
             descendants = 0
+        if tracer is not None:
+            tracer.finish()
+            if record.tracing.active and plan.attribution is not None:
+                record.denials, record.denials_total = read_trace(
+                    tracer.directory, plan.attribution
+                )
+            tracer.cleanup()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         for relay in relays:
@@ -394,8 +427,42 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
     elif status is not None:
         outcome.exit_code = os.waitstatus_to_exitcode(status)
         outcome.convergence_exit_code = outcome.exit_code
+    if timed_out:
+        record.denials.append(
+            Denial(pid, "", "", "timeout", "resources.wall_clock_seconds", f"{limit:g} s", "")
+        )
+        record.denials_total += 1
     record.outcome = outcome
     return record
+
+
+def _attach_tracer(
+    tracer: Tracer,
+    pid: int,
+    fds: tuple[int, int, int, int],
+    deadline: float,
+    record: RunRecord,
+) -> None:
+    """Start strace on the waiting tool, then release the tool, traced or not."""
+    ack_r, ack_w, go_r, go_w = fds
+    os.close(ack_w)
+    os.close(go_r)
+    try:
+        ready = _read_report(ack_r, min(deadline, time.monotonic() + 5), max_bytes=1)
+        if ready == b"R":
+            tracer.start(pid)
+            if tracer.wait_attached(pid):
+                record.tracing.active = True
+            else:
+                record.tracing.detail = tracer.detail
+                tracer.stop()
+        else:
+            record.tracing.detail = "the tool stopped before the tracer could attach"
+    finally:
+        with contextlib.suppress(OSError):
+            os.write(go_w, b"G")
+        os.close(go_w)
+        os.close(ack_r)
 
 
 def resource_name(which: int) -> str:

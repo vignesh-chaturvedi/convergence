@@ -166,8 +166,7 @@ jobs:
         run: >
           uv run --locked python -m escape.runner validity --set dev --set controls
           --json out/validity.json --markdown out/validity.md
-      - name: Confined matrix (expected to fail until Phase 4)
-        continue-on-error: true
+      - name: Confined matrix (convergence run; must pass)
         run: >
           uv run --locked python -m escape.runner run --launcher convergence
           --set dev --set controls --json out/confined.json --markdown out/confined.md

@@ -1,5 +1,49 @@
 {
   "$defs": {
+    "Denial": {
+      "description": "One failed operation and the mechanism that caused it (ADR 0007).",
+      "properties": {
+        "errno": {
+          "title": "Errno",
+          "type": "string"
+        },
+        "line": {
+          "title": "Line",
+          "type": "string"
+        },
+        "mechanism": {
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "pid": {
+          "title": "Pid",
+          "type": "integer"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "syscall": {
+          "title": "Syscall",
+          "type": "string"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pid",
+        "syscall",
+        "errno",
+        "mechanism",
+        "rule",
+        "target",
+        "line"
+      ],
+      "title": "Denial",
+      "type": "object"
+    },
     "KernelInfo": {
       "properties": {
         "landlock_abi": {
@@ -152,6 +196,29 @@
       "title": "StreamRecord",
       "type": "object"
     },
+    "Tracing": {
+      "properties": {
+        "active": {
+          "title": "Active",
+          "type": "boolean"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "requested": {
+          "title": "Requested",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requested",
+        "active"
+      ],
+      "title": "Tracing",
+      "type": "object"
+    },
     "Usage": {
       "description": "Resource use of every process of the run (RUSAGE_CHILDREN of the supervisor).",
       "properties": {
@@ -205,6 +272,18 @@
       },
       "title": "Degraded",
       "type": "array"
+    },
+    "denials": {
+      "items": {
+        "$ref": "#/$defs/Denial"
+      },
+      "title": "Denials",
+      "type": "array"
+    },
+    "denials_total": {
+      "default": 0,
+      "title": "Denials Total",
+      "type": "integer"
     },
     "duration_seconds": {
       "default": 0.0,
@@ -260,6 +339,9 @@
     },
     "stdout": {
       "$ref": "#/$defs/StreamRecord"
+    },
+    "tracing": {
+      "$ref": "#/$defs/Tracing"
     },
     "usage": {
       "anyOf": [

@@ -234,6 +234,12 @@ convergence run --policy p.yaml --timeout 30 -- COMMAND
   `--timeout`, whichever is sooner.
 - The tool's stdout and stderr are passed through. Its stdin is `run`'s stdin. Core dumps
   are disabled.
+- `--trace` adds denial capture: strace watches the tool from outside the sandbox, and the
+  record lists each failed operation with the mechanism and policy section that caused it
+  (`landlock-filesystem`, `landlock-network`, `seccomp`, `rlimit`, `timeout`, or
+  `unattributed` when nothing in the sandbox explains it). The first few are printed after
+  the run. It is slower, and strace runs with your file access
+  ([ADR 0007](adr/0007-denial-capture.md)).
 - Each run is saved as a `convergence.run/1` record
   ([schema](../schemas/run-v1.json)) under `$XDG_STATE_HOME/convergence/runs/`
   (`~/.local/state` when unset). `--no-record` skips it.

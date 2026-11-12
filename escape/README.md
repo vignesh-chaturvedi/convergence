@@ -12,9 +12,11 @@ in [ADR 0005](../docs/adr/0005-escape-matrix-design.md); the boundary it tests i
 >
 > - **Unconfined:** 45 development attacks are valid and 2 are `not-testable` (the host
 >   refuses raw sockets and TIOCSTI); all 26 holdout attacks are valid.
-> - **Under `convergence run`:** 53 development attacks pass. There is 1 escape
->   (`exec-via-loader-001`, a known limitation in THREAT_MODEL.md) and 1 documented
->   limitation (`signal-outside-001`, which needs Landlock ABI 6). All 10 controls pass.
+> - **Under `convergence run`:** 53 development attacks pass. There is 1 known limitation
+>   (`exec-via-loader-001`, counted as an escape and documented in THREAT_MODEL.md) and
+>   1 documented limitation (`signal-outside-001`, which needs Landlock ABI 6). All 10
+>   controls pass. On the CI kernels (Linux 7.0, ABI 8), 54 pass, including the signal
+>   case.
 > - **The holdout has not been run under Convergence yet.**
 >
 > Results are in [results/](results/README.md).
@@ -253,9 +255,11 @@ protection is the **safety envelope** in `_limits.py`: rlimits at four times the
 capped at half the host's RAM. That keeps a validity run from taking the host down while
 still letting it exceed the policy.
 
-`ConvergenceLauncher` checks once whether `convergence run` exists. Until Phase 4 it does
-not, and every case is reported `launcher-unavailable`: nothing is executed, and the run
-fails.
+`ConvergenceLauncher` runs `convergence run --policy <file> -- <argv>` without `--trace`, so
+the matrix measures the default configuration. If `convergence run` is missing, every case
+is reported `launcher-unavailable`: nothing is executed, and the run fails. Under it, the
+supervisor is the root process; per-process measurements (memory, CPU, descriptors) leave it
+out, because they are about the tool.
 
 Output is drained by reader threads that keep at most 1 MiB per stream, so a payload that
 floods stdout cannot exhaust the runner.
@@ -270,6 +274,7 @@ floods stdout cannot exhaust the runner.
 | attack | convergence | no | `pass` | |
 | attack | convergence | yes | `escape` (the policy was too loose) | yes |
 | attack, kernel ABI < `min_abi` | convergence | yes | `documented-limitation` | |
+| dev attack listed in [`known-limitations.yaml`](known-limitations.yaml) | convergence | yes | `known-limitation` (inherent to the design, documented in THREAT_MODEL.md) | |
 | control | convergence | yes | `pass` | |
 | control | convergence | no | `false-denial` (the policy was too tight) | yes |
 | any | convergence | — | `skipped-unenforceable` if `explain` says the policy cannot be enforced here | |
@@ -278,9 +283,13 @@ floods stdout cannot exhaust the runner.
 | any | any | — | `not-testable` if the host lacks a `requires` precondition | |
 | any | any | — | `skipped-platform`, or `error` if the harness could not run the case | `error`: yes |
 
-- **Escape rate** = escapes / (passes + escapes) among attacks. Documented limitations,
-  not-testable cases, skips, and unavailable runs are excluded and listed separately, never
-  folded in.
+- **Escape rate** = escapes / (passes + escapes) among attacks, where a `known-limitation`
+  counts as an escape: listing a case explains it, it does not hide it. Documented
+  (ABI-floor) limitations, not-testable cases, skips, and unavailable runs are excluded and
+  listed separately, never folded in.
+- **Known limitations** are development cases that escape by design. Each entry in
+  `known-limitations.yaml` gives the reason and the THREAT_MODEL.md section that documents
+  it, and a test checks both. The list never applies to the holdout.
 - **False-denial rate** = false denials / (passes + false denials) among controls.
 - Both come with Wilson 95% intervals and are reported per set (dev, holdout, controls) and
   per kernel, one report per environment.
@@ -428,6 +437,7 @@ Phase 4 decision on mitigating `chmod`/`chown`/`utime` needs.
   0 of 10. Three development cases signalled `${REACHED}` after the step their mechanism
   stops (creating a UDP or unix socket), or lacked a grant their setup needed (the
   pseudo-terminal for `passwd`); they were corrected and are still valid unconfined.
-- **Phase 4, next:** denial capture (ADR 0007); then run the holdout once under Convergence
-  and commit the result as it is. The holdout's earlier entries in `holdout-runs.jsonl` are
+- **Phase 4, done:** denial capture, opt-in with `--trace` (ADR 0007). The confined matrix
+  is required in CI, with `exec-via-loader-001` as its one listed known limitation.
+- **Phase 4, next:** run the holdout once under Convergence and commit the result as it is. The holdout's earlier entries in `holdout-runs.jsonl` are
   unconfined validity runs, not that run.

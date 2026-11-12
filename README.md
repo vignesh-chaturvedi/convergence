@@ -34,7 +34,9 @@ The tool runs with:
 Everything it starts is killed when its first process exits, or at the policy's wall-clock
 limit. Convergence refuses a policy the running kernel cannot fully enforce, unless you pass
 `--allow-degraded`, and then it lists exactly what is degraded. Each run is recorded as JSON
-under `~/.local/state/convergence/runs/`, or printed with `--json`. The spawn model is in
+under `~/.local/state/convergence/runs/`, or printed with `--json`. With `--trace`, the
+record also says which rule denied each failed operation (strace, outside the sandbox;
+[ADR 0007](docs/adr/0007-denial-capture.md)). The spawn model is in
 [ADR 0006](docs/adr/0006-spawn-model.md).
 
 On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), the escape matrix gives these
@@ -42,9 +44,9 @@ results ([report](escape/results/README.md)):
 
 | | Result |
 |---|---|
-| Development attacks blocked | 53 of the 55 that can be tested there |
+| Development attacks blocked | 53 of the 55 that can be tested there (54 on the Linux 7.0 CI kernels) |
 | Benign control workloads | all 10 run, with no false denials |
-| Escapes | 1, running a readable program through the dynamic loader: a known limitation, see [THREAT_MODEL.md](THREAT_MODEL.md) |
+| Escapes | 1, running a readable program through the dynamic loader: a known limitation of the design, see [THREAT_MODEL.md](THREAT_MODEL.md) |
 | Needs a newer kernel | 1, signal scoping (Landlock ABI 6) |
 
 The sealed holdout, which was written independently of the runtime, has not been run yet.

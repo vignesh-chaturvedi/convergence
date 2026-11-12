@@ -38,6 +38,7 @@ from escape.expand import UnknownVariable, VarValue, expand, expand_string
 from escape.launchers import LAUNCHERS, ConvergenceLauncher, LaunchSpec, UnconfinedLauncher
 from escape.oracles import CaseDirs, Evidence, OracleConfigError, create
 from escape.oracles.base import scan_outputs
+from escape.oracles.execution import find_loader
 from escape.preconditions import Availability, Precondition, probe, probe_all
 from escape.procs import Sampler, become_subreaper, kill_all, reap_zombie_children
 from escape.report import CaseResult, Environment
@@ -51,7 +52,6 @@ SETS = {
     "controls": REPO / "controls",
 }
 HOLDOUT_LOG = REPO / "escape" / "holdout-runs.jsonl"
-LOADERS = ("/usr/lib/ld-linux-aarch64.so.1", "/lib64/ld-linux-x86-64.so.2")
 STDERR_TAIL = 600
 
 
@@ -119,9 +119,9 @@ class Runner:
             "PYTHON": self.python,
             "REACHED": reached,
         }
-        loader = next((p for p in LOADERS if os.path.exists(p)), None)
+        loader = find_loader()
         if loader is not None:
-            variables["LOADER"] = str(Path(loader).resolve())
+            variables["LOADER"] = loader
         return variables
 
     def run_case(self, path: Path, case: Case, set_name: str) -> CaseResult:

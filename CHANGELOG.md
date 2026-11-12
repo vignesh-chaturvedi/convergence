@@ -26,6 +26,11 @@ All notable changes to this project are recorded here. The format follows
   binary that picks its tool from its own name: copied as `marker`, it exited at once and was
   never sampled. The copy is now named `sleep` and checked during setup. The escape job now
   also runs on `ubuntu-latest` (Ubuntu 26.04).
+- On Ubuntu 26.04 `exec-via-loader-001` was invalid: an Ubuntu patch makes uutils refuse to
+  run unless the tool name matches the executable the kernel started, which through the
+  dynamic loader is `ld.so`. Setup now checks each candidate both directly and through the
+  loader and takes the first that works; there that is GNU's `/usr/bin/gnusleep`. The
+  loader route now has its own test.
 - The process sampler now includes setuid processes (their `/proc/<pid>` is owned by root),
   so `privilege-gain` can fire; the unconfined safety limit counts threads, which is what
   `RLIMIT_NPROC` charges.

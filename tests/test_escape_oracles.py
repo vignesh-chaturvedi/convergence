@@ -24,7 +24,7 @@ import pytest
 
 from convergence.policy.load import parse_policy
 from escape.launchers import Exit, Output
-from escape.oracles import CaseDirs, Evidence, Oracle, OracleConfigError, Setup, create
+from escape.oracles import CaseDirs, Evidence, Oracle, OracleConfigError, Setup, create, execution
 from escape.oracles.base import scan_outputs
 from escape.procs import Peak, Sampler, SamplerOptions, StatLine
 from escape.schema import OracleSpec
@@ -404,6 +404,53 @@ def test_exec_probe_elf_marker_is_seen_mapped_executable(dirs: CaseDirs) -> None
     sampler.stop()
     observation = oracle.check(dirs, evidence(peaks=sampler.peaks()))
     assert observation.observed, observation.evidence
+
+
+def test_exec_probe_elf_marker_is_seen_through_the_loader(dirs: CaseDirs) -> None:
+    # The loader maps the marker itself; the kernel only executes ld.so. Ubuntu 26.04's
+    # uutils sleep refuses this, so the oracle must have picked a sleep that does not.
+    loader = execution.find_loader()
+    if loader is None:
+        pytest.skip("no known dynamic loader on this host")
+    oracle = make("exec-probe")
+    setup = oracle.setup(dirs)
+    marker = str(setup.variables["MARKER"])
+    process = subprocess.Popen([loader, marker, "1"], start_new_session=True)
+    sampler = Sampler(process.pid, setup.sampler, exclude=set())
+    sampler.start()
+    assert process.wait() == 0
+    sampler.stop()
+    observation = oracle.check(dirs, evidence(peaks=sampler.peaks()))
+    assert observation.observed, observation.evidence
+
+
+def test_exec_marker_falls_back_to_the_next_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refuses = tmp_path / "refuses"
+    refuses.write_text("#!/bin/sh\necho 'not this name' >&2\nexit 3\n")
+    refuses.chmod(0o755)
+    real = next(p for p in ("/usr/bin/sleep", "/bin/sleep") if os.path.exists(p))
+    monkeypatch.setattr(execution, "SLEEP_CANDIDATES", (str(refuses), real, "/no/such/sleep"))
+    monkeypatch.setattr(execution, "find_loader", lambda: None)  # the direct check only
+    dest = tmp_path / "sleep"
+    assert execution.plant_sleep(dest) == Path(real).resolve()
+    assert subprocess.run([str(dest), "0"], check=False).returncode == 0
+
+
+def test_exec_marker_setup_fails_loudly_when_nothing_works(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refuses = tmp_path / "refuses"
+    refuses.write_text("#!/bin/sh\necho 'not this name' >&2\nexit 3\n")
+    refuses.chmod(0o755)
+    monkeypatch.setattr(execution, "SLEEP_CANDIDATES", (str(refuses),))
+    with pytest.raises(RuntimeError, match=r"exits 3 when run directly: not this name"):
+        execution.plant_sleep(tmp_path / "sleep")
+    assert not (tmp_path / "sleep").exists()
+    monkeypatch.setattr(execution, "SLEEP_CANDIDATES", ("/no/such/sleep",))
+    with pytest.raises(RuntimeError, match="none of /no/such/sleep exists"):
+        execution.plant_sleep(tmp_path / "sleep")
 
 
 def test_exec_probe_elf_not_run(dirs: CaseDirs) -> None:

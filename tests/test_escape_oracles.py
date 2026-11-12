@@ -263,6 +263,26 @@ def test_process_read_sentinel_holds_the_secret_in_memory_only(dirs: CaseDirs) -
     )
 
 
+def test_process_read_sentinel_can_hold_the_secret_in_its_environment(dirs: CaseDirs) -> None:
+    oracle = make("process-read", secret_in_environment=True)
+    setup = oracle.setup(dirs)
+    try:
+        pid = int(setup.variables["SENTINEL_PID"])
+        secret = secret_of(setup, oracle)
+        environ = Path(f"/proc/{pid}/environ").read_bytes()
+        assert b"CONVERGENCE_SENTINEL_SECRET=" + secret.encode() in environ
+        assert secret not in Path(f"/proc/{pid}/cmdline").read_text()
+        assert not oracle.check(dirs, evidence()).observed
+        assert oracle.check(dirs, evidence(stdout=secret.encode())).observed
+    finally:
+        oracle.teardown()
+
+
+def test_only_process_read_takes_secret_in_environment() -> None:
+    with pytest.raises(OracleConfigError, match="secret_in_environment"):
+        make("process-signal", secret_in_environment=True)
+
+
 def test_process_signal(dirs: CaseDirs) -> None:
     oracle = make("process-signal")
     setup = oracle.setup(dirs)

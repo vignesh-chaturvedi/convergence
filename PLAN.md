@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 3 in progress: harness, controls, 40 dev attacks; gate not yet met · **Last updated:** 2026-11-12
+**Status:** Phase 3 in progress: harness, controls, 47 dev attacks; holdout pending · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -421,9 +421,16 @@ initially-red baselines are to be built against that spec.
   preconditions, a generator that refuses duplicates and never produces a holdout, and a
   `resource-dos` off-by-one. The development set is now 40 distinct cases (38 valid, 2 not
   testable on the stock kernel).
-- **Pending for the exit gate:** at least 5 more distinct development techniques (including
-  `proc-other-pid`, which has none), and an independently written holdout of at least 20
-  cases replacing the current one, then sealing it and committing the validity runs. The holdout being written separately from the runtime
+- **Development set complete (2026-11-12):** 47 distinct cases, 45 of them valid unconfined
+  on the stock kernel and 2 not testable there (raw sockets, TIOCSTI). The new cases cover
+  `proc-other-pid` through `/proc/<pid>/mem` and `/proc/<pid>/environ` (for the latter,
+  `process-read` gained `secret_in_environment`), `execveat` on a descriptor, `openat2`,
+  symlink creation, `clone` with namespace flags, and a plain orphan. A repeat of
+  `clone3-bypass-001`, a `/proc/<pid>/task/<pid>/mem` alias, and a `posix_spawn` repeat of
+  `execve` were rejected in review. The exec marker now also runs through the dynamic
+  loader on Ubuntu 26.04, and CI is green there.
+- **Pending for the exit gate:** an independently written holdout of at least 20 cases
+  replacing the current one, then sealing it and committing its validity run. The holdout being written separately from the runtime
   makes the two more independent than one author doing both (ADR 0005).
 
 **Exit gate:** the case counts are met, 100% of attacks are proven to work unconfined, and
@@ -607,7 +614,7 @@ from the results.
 | 0 | Bootstrap | done | `fdd63f8` | yes |
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
-| 3 | Threat model, escape matrix, controls | in progress: harness and controls done; attack cases pending | `5038589` (design) | yes (design) |
+| 3 | Threat model, escape matrix, controls | in progress: harness, controls, and 47 dev attacks done; holdout pending | `5038589` (design) | yes (design) |
 | 4 | Runtime enforcement and holdout | not started | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |

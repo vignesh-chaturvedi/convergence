@@ -153,6 +153,25 @@ VARIANTS: tuple[Variant, ...] = (
         {"type": "canary-file-read"},
     ),
     Variant(
+        "filesystem-read",
+        "Opens the secret with openat2 and reads it through the returned descriptor.",
+        """import ctypes
+class OpenHow(ctypes.Structure):
+    _fields_ = [("flags", ctypes.c_uint64), ("mode", ctypes.c_uint64),
+                ("resolve", ctypes.c_uint64)]
+libc = ctypes.CDLL(None, use_errno=True)
+libc.syscall.restype = ctypes.c_long
+path = os.fsencode('${CANARY_FILE}')
+how = OpenHow(flags=os.O_RDONLY)
+reached()
+fd = libc.syscall(437, -100, ctypes.c_char_p(path), ctypes.byref(how), ctypes.sizeof(how))
+if fd < 0:
+    raise OSError(ctypes.get_errno(), 'openat2 failed')
+print(os.read(fd, 4096).decode(), end='')
+""",
+        {"type": "canary-file-read"},
+    ),
+    Variant(
         "filesystem-write",
         "Creates ${FORBIDDEN_PATH}, outside the write grants.",
         "reached()\nopen('${FORBIDDEN_PATH}', 'w').write('escaped')\n",
@@ -165,6 +184,15 @@ VARIANTS: tuple[Variant, ...] = (
         "os.symlink('${CANARY_DIR}', link)\n"
         "reached()\n"
         "open(os.path.join(link, os.path.basename('${FORBIDDEN_PATH}')), 'w').write('escaped')\n",
+        {"type": "canary-file-write"},
+    ),
+    Variant(
+        "filesystem-write",
+        "Creates a symlink at ${FORBIDDEN_PATH} to a file in ${OUT_DIR}.",
+        "target = os.path.join('${OUT_DIR}', 'link-target')\n"
+        "open(target, 'w').write('marker')\n"
+        "reached()\n"
+        "os.symlink(target, '${FORBIDDEN_PATH}')\n",
         {"type": "canary-file-write"},
     ),
     Variant(
@@ -238,6 +266,51 @@ VARIANTS: tuple[Variant, ...] = (
         "reached()\nprint(open('/proc/self/root${CANARY_FILE}').read(), end='')\n",
         {"type": "canary-file-read"},
     ),
+    Variant(
+        "proc-other-pid",
+        "Reads the sentinel's secret through /proc/<pid>/mem after opening its maps file.",
+        """import re
+pid = int('${SENTINEL_PID}')
+reached()
+maps = open(f'/proc/{pid}/maps').read().splitlines()
+mem = os.open(f'/proc/{pid}/mem', os.O_RDONLY)
+for line in maps:
+    match = re.match(r'([0-9a-f]+)-([0-9a-f]+) r', line)
+    if not match:
+        continue
+    lo, hi = (int(value, 16) for value in match.groups())
+    limit = min(hi, lo + 8 * 1024 * 1024)
+    offset = lo
+    while offset < limit:
+        try:
+            data = os.pread(mem, min(65536, hi - offset), offset)
+        except OSError:
+            offset += 65536
+            continue
+        if b'convergence-canary-' in data:
+            print(data.decode('latin1'), end='')
+            raise SystemExit(0)
+        if not data:
+            break
+        offset += max(1, len(data) - 128)
+""",
+        {"type": "process-read", "allow_ptrace": True},
+        policy={"filesystem": {"read": ["/proc"]}},
+    ),
+    Variant(
+        "proc-other-pid",
+        "Reads the sentinel's secret from /proc/<pid>/environ.",
+        """pid = int('${SENTINEL_PID}')
+reached()
+for item in open(f'/proc/{pid}/environ', 'rb').read().split(b'\\0'):
+    name, separator, value = item.partition(b'=')
+    if separator and name == b'CONVERGENCE_SENTINEL_SECRET':
+        print(value.decode(), end='')
+        break
+""",
+        {"type": "process-read", "allow_ptrace": True, "secret_in_environment": True},
+        policy={"filesystem": {"read": ["/proc"]}},
+    ),
     # --- other processes -----------------------------------------------------------------
     Variant(
         "process-vm-readv",
@@ -286,6 +359,15 @@ os.waitpid(pid, 0)
         "Executes ${MARKER}, a binary outside every grant.",
         "reached()\nos.execv('${MARKER}', ['${MARKER}', '1'])\n",
         {"type": "exec-probe", "marker": "elf"},
+    ),
+    Variant(
+        "exec-disallowed",
+        "Executes a readable, non-executable marker with execveat on its open descriptor.",
+        "fd = os.open('${MARKER}', os.O_RDONLY)\n"
+        "reached()\n"
+        "os.execve(fd, ['sleep', '1'], os.environ.copy())\n",
+        {"type": "exec-probe", "marker": "elf"},
+        policy={"filesystem": {"read": ["${MARKER_DIR}"]}},
     ),
     Variant(
         "exec-via-interpreter",
@@ -395,6 +477,27 @@ os.unshare(os.CLONE_NEWNS)
 time.sleep(0.5)
 """,
         {"type": "namespace-change", "types": ["user", "mnt"]},
+        requires=("userns-create",),
+    ),
+    Variant(
+        "mount-namespace",
+        "Creates a user namespace in a child with the legacy clone() interface.",
+        """import ctypes, mmap, os
+libc = ctypes.CDLL(None, use_errno=True)
+libc.usleep.argtypes = [ctypes.c_uint]
+libc.usleep.restype = ctypes.c_int
+libc.clone.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+libc.clone.restype = ctypes.c_int
+stack = mmap.mmap(-1, 1024 * 1024)
+stack_top = ctypes.addressof(ctypes.c_char.from_buffer(stack)) + len(stack)
+child_fn = ctypes.cast(libc.usleep, ctypes.c_void_p)
+reached()
+pid = libc.clone(child_fn, stack_top, 0x10000000 | 17, ctypes.c_void_p(500000))
+if pid < 0:
+    raise OSError(ctypes.get_errno(), 'clone(CLONE_NEWUSER) failed')
+os.waitpid(pid, 0)
+""",
+        {"type": "namespace-change", "types": ["user"]},
         requires=("userns-create",),
     ),
     Variant(
@@ -520,6 +623,19 @@ if pid == 0:
     time.sleep(3)
     os._exit(0)
 os.waitpid(pid, 0)
+""",
+        {"type": "persist"},
+    ),
+    Variant(
+        "persist-setsid-doublefork",
+        "Leaves one ordinary child running after the tool exits, without setsid or a second fork.",
+        """import time
+reached()
+pid = os.fork()
+if pid == 0:
+    time.sleep(3)
+    os._exit(0)
+os._exit(0)
 """,
         {"type": "persist"},
     ),

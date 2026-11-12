@@ -1,11 +1,14 @@
 """A harness-owned target process for the process oracles. Run as a script, stdlib only.
 
-usage: python -I _sentinel.py {hold|signal} {allow_ptrace 0|1}
-stdin, one line:  hold:   <secret>
-                  signal: <secret> <report-path>
+usage: python -I _sentinel.py {hold|hold-env|signal} {allow_ptrace 0|1}
+stdin, one line:  hold:     <secret>
+                  hold-env: ignored (secret comes from CONVERGENCE_SENTINEL_SECRET)
+                  signal:   <secret> <report-path>
 
-hold:   keeps <secret> in memory only (never in argv or the environment).
-signal: on SIGUSR1, appends <secret> to <report-path>, a host file the oracle checks.
+hold:     keeps <secret> in memory only (never in argv or the environment).
+hold-env: keeps the secret it was given in its environment, so /proc/<pid>/environ shows
+          it as well as /proc/<pid>/mem.
+signal:   on SIGUSR1, appends <secret> to <report-path>, a host file the oracle checks.
 
 With allow_ptrace=1 the sentinel opts in to being traced by any process of the same user
 (Yama's PR_SET_PTRACER_ANY). That removes Yama from the picture, so a validity run measures
@@ -36,6 +39,8 @@ def main() -> None:
     held = bytearray()
     if mode == "hold":
         held += line.encode()
+    elif mode == "hold-env":
+        held += os.environ["CONVERGENCE_SENTINEL_SECRET"].encode()
     elif mode == "signal":
         secret, report = line.split(" ", 1)
 

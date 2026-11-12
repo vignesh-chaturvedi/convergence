@@ -7,7 +7,7 @@ Markdown file is generated from its JSON.
 
 | File | Launcher | What it shows |
 |---|---|---|
-| `validity-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | 38 of the 40 development attacks escape with nothing confining them, and all 10 controls do their job. The other 2 attacks are `not-testable`: this host refuses raw sockets and TIOCSTI before Convergence is involved. This is the validity gate: a case that fails it proves nothing. |
+| `validity-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | 45 of the 47 development attacks escape with nothing confining them, and all 10 controls do their job. The other 2 attacks are `not-testable`: this host refuses raw sockets and TIOCSTI before Convergence is involved. This is the validity gate: a case that fails it proves nothing. |
 | `baseline-convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The "initially red" baseline: `convergence run` does not exist yet (Phase 4), so every testable case is `launcher-unavailable` and the run exits non-zero. Nothing is counted as a pass. |
 
 Both were generated on the Lima VM: Ubuntu 24.04.4, stock kernel 6.8.0-134-generic, aarch64,

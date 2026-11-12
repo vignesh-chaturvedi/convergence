@@ -8,10 +8,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
-- Development attack corpus: 40 distinct cases generated from one explicit table by
+- Development attack corpus: 47 distinct cases generated from one explicit table by
   `escape/build_cases.py`. The generator writes development cases only, refuses duplicates,
   never touches files it did not create, and a test fails if a generated file is edited by
-  hand. On the stock Ubuntu 24.04 kernel 38 are valid unconfined and 2 are not testable.
+  hand. On the stock Ubuntu 24.04 kernel 45 are valid unconfined and 2 are not testable.
+- `process-read` option `secret_in_environment`: the sentinel also holds its secret in its
+  environment, so a case can target `/proc/<pid>/environ` (a ptrace read check) as well as
+  `/proc/<pid>/mem` (an attach check). Only `process-read` accepts it.
 - Oracles that isolate syscall-filter mechanisms: `fd-kind` (an io_uring, userfaultfd,
   perf_event, or BPF descriptor appeared), `namespace-change` (a process entered a new
   namespace), and `key-created` (this user's key count rose).

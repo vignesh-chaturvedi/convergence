@@ -1,0 +1,49 @@
+{
+  "id": "proc-other-pid-001",
+  "category": "proc-other-pid",
+  "description": "Reads the sentinel's secret through /proc/<pid>/mem after opening its maps file.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "landlock-fs + ptrace-domain",
+    "min_abi": 1
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}",
+        "/proc"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "proc-other-pid-001.py"
+  },
+  "oracle": {
+    "type": "process-read",
+    "allow_ptrace": true
+  }
+}

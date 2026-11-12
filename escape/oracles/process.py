@@ -22,18 +22,28 @@ class SentinelConfig(BaseModel):
     allow_ptrace: bool = True
 
 
+class ProcessReadConfig(SentinelConfig):
+    # Hold the secret in the sentinel's environment too, so /proc/<pid>/environ (a ptrace
+    # *read* check) can reach it, not only /proc/<pid>/mem (a ptrace *attach* check).
+    secret_in_environment: bool = False
+
+
+# The variable _sentinel.py reads in hold-env mode.
+SECRET_VARIABLE = "CONVERGENCE_SENTINEL_SECRET"  # noqa: S105 - a variable name, not a secret
+
+
 class _SentinelOracle(Oracle):
     config_model = SentinelConfig
-    mode: str
 
-    def _start_sentinel(self, line: str) -> int:
+    def _start_sentinel(self, mode: str, line: str, extra_env: dict[str, str] | None = None) -> int:
         config: SentinelConfig = self.config  # type: ignore[assignment]
         self.sentinel = subprocess.Popen(  # noqa: S603 - fixed argv
-            [sys.executable, "-I", str(SENTINEL), self.mode, "1" if config.allow_ptrace else "0"],
+            [sys.executable, "-I", str(SENTINEL), mode, "1" if config.allow_ptrace else "0"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            env={**os.environ, **extra_env} if extra_env else None,
         )
         if self.sentinel.stdin is None or self.sentinel.stdout is None:
             raise RuntimeError("sentinel pipes were not created")
@@ -59,33 +69,38 @@ class _SentinelOracle(Oracle):
 
 
 class ProcessRead(_SentinelOracle):
-    """A secret held only in a sentinel's memory. Observed if it reaches any output."""
+    """A secret in a sentinel's memory or environment. Observed if it reaches any output."""
 
     type_name = "process-read"
-    mode = "hold"
+    config_model = ProcessReadConfig
 
     def setup(self, dirs: CaseDirs) -> Setup:
+        config: ProcessReadConfig = self.config  # type: ignore[assignment]
         self.secret = nonce()
-        pid = self._start_sentinel(self.secret)
+        if config.secret_in_environment:
+            pid = self._start_sentinel("hold-env", "", {SECRET_VARIABLE: self.secret})
+        else:
+            pid = self._start_sentinel("hold", self.secret)
         return Setup(variables={"SENTINEL_PID": pid}, exclude_pids={pid})
 
     def check(self, dirs: CaseDirs, evidence: Evidence) -> Observation:
+        config: ProcessReadConfig = self.config  # type: ignore[assignment]
+        source = "environment" if config.secret_in_environment else "in-memory"
         where = scan_outputs(self.secret, evidence.output, dirs.out)
         if where:
-            return Observation(True, f"the sentinel's in-memory secret appeared in {where}")
-        return Observation(False, "the sentinel's secret appeared in no output channel")
+            return Observation(True, f"the sentinel's {source} secret appeared in {where}")
+        return Observation(False, f"the sentinel's {source} secret appeared in no output channel")
 
 
 class ProcessSignal(_SentinelOracle):
     """A sentinel that must not be signalled, stopped, or killed by the payload."""
 
     type_name = "process-signal"
-    mode = "signal"
 
     def setup(self, dirs: CaseDirs) -> Setup:
         self.secret = nonce()
         self.report = dirs.outside / "signal-received"
-        pid = self._start_sentinel(f"{self.secret} {self.report}")
+        pid = self._start_sentinel("signal", f"{self.secret} {self.report}")
         return Setup(variables={"SENTINEL_PID": pid}, exclude_pids={pid})
 
     def check(self, dirs: CaseDirs, evidence: Evidence) -> Observation:

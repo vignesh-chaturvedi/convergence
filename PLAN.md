@@ -742,10 +742,15 @@ from the results.
   - `convergence mcp` started.
 
   The VM was then deleted.
-- **`.github/workflows/release.yml`:** trusted publishing on a `v*` tag. It builds, runs
-  `twine check --strict`, publishes to TestPyPI, installs from TestPyPI on a fresh runner
-  (dependencies from PyPI only) and runs `doctor`, then publishes to PyPI. Actions are
+- **`.github/workflows/release.yml`:** trusted publishing on a `v*` tag. Actions are
   pinned by commit. The owner's steps are in `docs/RELEASING.md`.
+  - The first `v0.1.0` run stopped at TestPyPI, twice: `invalid-publisher`, meaning no
+    matching trusted publisher on TestPyPI. Nothing was published.
+  - At the owner's choice, TestPyPI was dropped. The workflow now builds, runs
+    `twine check --strict`, publishes to PyPI, then installs from PyPI on a fresh runner and
+    runs `doctor`.
+  - The `v0.1.0` tag was moved to that commit, which was safe because nothing had been
+    published.
 - **Pending (owner only):** pending publishers on PyPI and TestPyPI, optionally a reviewer
   on the `pypi` environment, and the decision to push the `v0.1.0` tag.
 

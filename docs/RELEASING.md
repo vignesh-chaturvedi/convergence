@@ -6,7 +6,7 @@ workflow is running, so no API token exists anywhere.
 
 ## One-time setup (the project owner)
 
-These steps need the owner's PyPI and TestPyPI accounts; nobody else can do them.
+These steps need the owner's PyPI account; nobody else can do them.
 
 1. **PyPI.** Go to <https://pypi.org/manage/account/publishing/> and add a *pending
    publisher*:
@@ -15,9 +15,7 @@ These steps need the owner's PyPI and TestPyPI accounts; nobody else can do them
    - Repository name: `convergence`
    - Workflow name: `release.yml`
    - Environment name: `pypi`
-2. **TestPyPI.** Do the same at <https://test.pypi.org/manage/account/publishing/>, with
-   environment name `testpypi`.
-3. **Recommended:** in the GitHub repository settings, under *Environments → pypi*, add
+2. **Recommended:** in the GitHub repository settings, under *Environments → pypi*, add
    yourself as a required reviewer. Then nothing reaches PyPI until you approve it, even
    after the tag is pushed.
 
@@ -31,10 +29,13 @@ These steps need the owner's PyPI and TestPyPI accounts; nobody else can do them
 The workflow then:
 1. checks that the tag matches the version, builds the sdist and wheel, and runs
    `twine check --strict`;
-2. publishes to **TestPyPI**;
-3. installs that package from TestPyPI on a fresh `ubuntu-24.04` runner (dependencies from
-   PyPI only) and runs `convergence doctor`;
-4. publishes to **PyPI**, after your approval if the `pypi` environment requires it.
+2. publishes to **PyPI**, after your approval if the `pypi` environment requires it;
+3. installs the published package from PyPI on a fresh `ubuntu-24.04` runner and runs
+   `convergence doctor`.
+
+There is no TestPyPI step. The first attempt of 0.1.0 used one; TestPyPI refused it, because
+no trusted publisher there matched, so it was dropped at the owner's choice. Nothing had been
+published at that point.
 
 Before the first release, the wheel was also installed on a fresh Ubuntu 24.04 VM (stock
 kernel 6.8, aarch64), where `doctor`, a sandboxed run, and `convergence mcp` were checked.

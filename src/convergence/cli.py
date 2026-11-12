@@ -151,6 +151,72 @@ def _run(args: argparse.Namespace) -> int:
     return outcome.convergence_exit_code
 
 
+def _observe(args: argparse.Namespace) -> int:
+    from convergence.observe.driver import WARNING, observe
+    from convergence.runtime.plan import RunError
+    from convergence.runtime.record import runs_dir
+
+    command = list(args.command)
+    if command[:1] == ["--"]:
+        command = command[1:]
+    _say(WARNING)
+    try:
+        observation, code = observe(command, timeout=args.timeout)
+    except RunError as exc:
+        _say(str(exc))
+        return exc.exit_code
+    if args.out:
+        target = Path(args.out)
+    else:
+        target = runs_dir().parent / "observations" / f"{observation.id}.json"
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target.write_text(observation.to_json() + "\n")
+    files = sum(1 for e in observation.events if e.kind == "file")
+    _say(
+        f"observed {len(observation.events)} distinct events ({files} file, "
+        f"{sum(1 for e in observation.events if e.kind == 'exec')} exec, "
+        f"{sum(1 for e in observation.events if e.kind == 'net')} network) in "
+        f"{len(observation.processes)} process(es); "
+        + (
+            "complete"
+            if observation.complete
+            else "INCOMPLETE: " + "; ".join(observation.limitations)
+        )
+    )
+    _say(f"observation saved to {target}")
+    return code
+
+
+def _generate(args: argparse.Namespace) -> int:
+    from convergence.generate.policy import generate, render
+    from convergence.observe.model import load
+    from convergence.policy.load import PolicyError
+
+    try:
+        observation = load(args.source)
+    except (OSError, ValueError) as exc:
+        _say(f"{args.source}: {exc}")
+        return EXIT_FAILED
+    generated = generate(observation, allow_list=args.allow_list)
+    try:
+        text = render(generated)
+    except PolicyError as exc:  # a bug in the generator, never the user's fault
+        _say("the generated policy is invalid; please report this")
+        for issue in exc.issues:
+            sys.stderr.write(f"  {issue}\n")
+        return EXIT_FAILED
+    for warning in generated.warnings:
+        _say(f"warning: {warning}")
+    if args.out:
+        Path(args.out).write_text(text)
+        _say(f"policy written to {args.out} ({len(generated.reasons)} rules, each with its reason)")
+    else:
+        sys.stdout.write(text)
+    if args.rationale:
+        Path(args.rationale).write_text(generated.rationale_json() + "\n")
+    return EXIT_OK
+
+
 def _report_denials(record: RunRecord) -> None:
     tracing = record.tracing
     if tracing.requested and not tracing.active:
@@ -291,6 +357,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
     run.set_defaults(handler=_run)
+
+    observe = commands.add_parser(
+        "observe",
+        help="record what a command does, to generate a policy (NOT a sandbox)",
+        description=(
+            "Run COMMAND under strace and record the files it opens, the directories it "
+            "lists or changes, the programs it runs, the ports it uses, and every system call "
+            "(ADR 0008). This is NOT a sandbox: the command has your full access; only "
+            "no_new_privs, resource limits, and the timeout apply. Observe untrusted tools "
+            "only in a disposable VM."
+        ),
+        epilog="Exit status: the command's own, 128+N for a signal, 124 timeout, 125 not started.",
+    )
+    observe.add_argument(
+        "--out",
+        metavar="FILE",
+        help="where to write the observation (default: under ~/.local/state/convergence)",
+    )
+    observe.add_argument(
+        "--timeout", type=_positive_float, default=60.0, metavar="S", help="default: 60"
+    )
+    observe.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
+    observe.set_defaults(handler=_observe)
+
+    gen = commands.add_parser(
+        "generate",
+        help="write a minimal policy from an observation, with a reason for every rule",
+        description=(
+            "Write the smallest policy that permits what the observation saw (ADR 0009). "
+            "Every rule cites the events that justify it. Credential locations, other "
+            "processes' /proc entries, and unix-socket connections are never granted; they "
+            "are reported as warnings."
+        ),
+    )
+    gen.add_argument(
+        "--from", dest="source", required=True, metavar="FILE", help="an observation file"
+    )
+    gen.add_argument("--out", metavar="FILE", help="write the policy here (default: stdout)")
+    gen.add_argument(
+        "--rationale", metavar="FILE", help="also write every rule's reason and events as JSON"
+    )
+    gen.add_argument(
+        "--allow-list",
+        action="store_true",
+        help="allow only the syscalls observed (stricter, and fails on any new code path)",
+    )
+    gen.set_defaults(handler=_generate)
     return parser
 
 

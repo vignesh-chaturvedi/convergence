@@ -18,6 +18,8 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
+from convergence.observe.model import SCHEMA as OBSERVATION_SCHEMA
+from convergence.observe.model import Observation
 from convergence.policy.model import SCHEMA as POLICY_SCHEMA
 from convergence.policy.model import Policy
 from convergence.probe.report import SCHEMA as DOCTOR_SCHEMA
@@ -65,10 +67,22 @@ def run_schema() -> dict[str, Any]:
     }
 
 
+def observation_schema() -> dict[str, Any]:
+    schema = TypeAdapter(Observation).json_schema(mode="serialization")
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": f"{BASE_URL}/observation-v1.json",
+        "title": OBSERVATION_SCHEMA,
+        "description": "An observation, written by `convergence observe` or an importer.",
+        **{k: v for k, v in schema.items() if k not in ("title", "description")},
+    }
+
+
 SCHEMAS: dict[str, Callable[[], dict[str, Any]]] = {
     "policy-v1.json": policy_schema,
     "doctor-v1.json": doctor_schema,
     "run-v1.json": run_schema,
+    "observation-v1.json": observation_schema,
 }
 
 

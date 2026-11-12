@@ -74,6 +74,33 @@ reports what that kernel *cannot* do. For example, signal and abstract-unix-sock
 ([sample output](docs/evidence/doctor/lima-ubuntu-24.04-ga-aarch64.txt),
 [ABI reference](docs/landlock-abi.md)).
 
+## Generate a policy from what a tool does: `observe` and `generate`
+
+```bash
+convergence observe --out obs.json -- python3 tool.py --input data.json   # NOT a sandbox
+convergence generate --from obs.json --out policy.yaml --rationale why.json
+convergence run --policy policy.yaml -- python3 tool.py --input data.json
+```
+
+`observe` runs the tool under strace and records:
+- the files it opens, and the directories it lists or changes;
+- the programs it runs, and the ports it uses;
+- every system call it makes.
+
+It is **not a sandbox**: the tool has your full access, so observe untrusted tools only in a
+disposable VM ([ADR 0008](docs/adr/0008-observation-mechanism.md)).
+
+`generate` writes the smallest policy that permits what was observed
+([ADR 0009](docs/adr/0009-policy-generation.md)):
+- grants are exact unless an operation needs a directory;
+- an installed runtime tree read heavily is collapsed to its directory, and the comment says
+  how many files justified it;
+- every rule cites the events behind it;
+- credential locations, other processes' `/proc` entries, and unix-socket connections are
+  never granted, only reported.
+
+The policy fails closed on code paths the observation did not see.
+
 ## Policies: `validate` and `explain`
 
 A policy lists what a tool may do. Everything else is denied

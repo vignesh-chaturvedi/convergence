@@ -8,6 +8,29 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `convergence observe -- COMMAND`: records what a command does under strace (ADR 0008):
+  - files opened, by how they were opened;
+  - directories listed, created in, or removed from;
+  - programs executed;
+  - ports connected to, sent to, or bound;
+  - every system call, with counts.
+
+  Identical events are merged and each gets a citable id. Not a sandbox: only
+  `no_new_privs`, resource limits, and a timeout apply, and it says so on every run. Format
+  `convergence.observation/1` (`schemas/observation-v1.json`).
+- `convergence generate --from OBS`: the smallest policy for an observation (ADR 0009):
+  - exact file grants; directories only for listing, creating, removing, or renaming;
+  - installed runtime trees collapsed when at least 5 files under them were read, never onto
+    `/`, `/etc`, `/usr`, or `$HOME`;
+  - ELF and `#!` interpreters added for every executed program;
+  - `${CWD}` and `${HOME}` substituted;
+  - ports for every connect, including refused ones;
+  - credential locations, other processes' `/proc`, and unix sockets never granted, only
+    reported.
+
+  Each rule carries its reason and event ids as a comment, and `--rationale` writes them as
+  JSON. The output is checked against the policy schema before it is written.
+
 - `convergence run --policy P -- COMMAND`: runs a command under a policy with Landlock
   (files, TCP/UDP ports, signal and abstract-socket scoping), a seccomp filter, `no_new_privs`,
   and rlimits. The tool gets an environment built only from the policy and no inherited

@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 4 done (exit gate met); Phase 5 next · **Last updated:** 2026-11-12
+**Status:** Phase 5 in progress: observe and generate built · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -552,6 +552,19 @@ required.
   input A (*same-input FDR*) and with a different input B (*varied-input FDR*, which
   measures how incomplete the observation was). Both numbers are published.
 
+**Progress (Phase 5):**
+- **`observe` and `generate` built (2026-11-12)**, with ADRs 0008 and 0009. strace starts the
+  command, so Yama needs no exception. Its `-yy` output gives the real path behind every
+  descriptor and the protocol of every socket.
+
+  The kernel loads ELF and `#!` interpreters without a visible system call, so `generate`
+  reads `PT_INTERP` and `#!` lines itself.
+
+  End to end in the VM, a tool was observed, its policy generated, and the tool run under
+  that policy with the same result. A file the observation never saw is denied.
+- **Pending:** `explain --run`; the Divergence importer (on real Divergence output); the
+  same-input and varied-input false-denial rates for the controls.
+
 **Exit gate:** every control passes with the same input, both FDR numbers are committed, and
 the importer passes on real Divergence output.
 
@@ -667,7 +680,7 @@ from the results.
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | done | see git log | |
 | 4 | Runtime enforcement and holdout | done | see git log | |
-| 5 | Observe, generate, importer, denial explain | not started | | |
+| 5 | Observe, generate, importer, denial explain | in progress: observe and generate done | | |
 | 6 | MCP server | not started | | |
 | 7 | Benchmarks | not started | | |
 | 8 | PyPI release | not started | | |

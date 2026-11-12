@@ -1,0 +1,316 @@
+{
+  "$defs": {
+    "Event": {
+      "properties": {
+        "address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Address"
+        },
+        "blocked": {
+          "default": false,
+          "title": "Blocked",
+          "type": "boolean"
+        },
+        "count": {
+          "default": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "decoy": {
+          "default": false,
+          "title": "Decoy",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "exec",
+            "net"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "read",
+            "write",
+            "create",
+            "delete",
+            "rename-from",
+            "rename-to",
+            "readdir",
+            "truncate",
+            "exec",
+            "connect",
+            "send",
+            "bind"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "pid": {
+          "default": 0,
+          "title": "Pid",
+          "type": "integer"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Port"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "enum": [
+                "tcp",
+                "udp",
+                "unix"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "requested": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested"
+        },
+        "result": {
+          "default": "ok",
+          "title": "Result",
+          "type": "string"
+        },
+        "syscall": {
+          "default": "",
+          "title": "Syscall",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "op"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "Exit": {
+      "properties": {
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Code"
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signal"
+        },
+        "status": {
+          "enum": [
+            "exited",
+            "signaled",
+            "timed-out",
+            "interrupted",
+            "not-observed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "Exit",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/vignesh-chaturvedi/convergence/blob/main/schemas/observation-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "An observation, written by `convergence observe` or an importer.",
+  "properties": {
+    "command": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Command",
+      "type": "array"
+    },
+    "complete": {
+      "title": "Complete",
+      "type": "boolean"
+    },
+    "cpu_seconds": {
+      "default": 0.0,
+      "title": "Cpu Seconds",
+      "type": "number"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "cwd": {
+      "title": "Cwd",
+      "type": "string"
+    },
+    "duration_seconds": {
+      "default": 0.0,
+      "title": "Duration Seconds",
+      "type": "number"
+    },
+    "environment_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Environment Names",
+      "type": "array"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "exit": {
+      "$ref": "#/$defs/Exit"
+    },
+    "home": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Home"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "max_rss_kb": {
+      "default": 0,
+      "title": "Max Rss Kb",
+      "type": "integer"
+    },
+    "processes": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Processes",
+      "type": "array"
+    },
+    "provenance": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "schema": {
+      "default": "convergence.observation/1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "strace",
+        "divergence"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "syscalls": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Syscalls",
+      "type": "object"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "created_at",
+    "source",
+    "command",
+    "cwd",
+    "home",
+    "complete",
+    "events"
+  ],
+  "title": "convergence.observation/1",
+  "type": "object"
+}

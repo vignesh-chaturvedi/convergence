@@ -278,6 +278,42 @@ def test_process_read_sentinel_can_hold_the_secret_in_its_environment(dirs: Case
         oracle.teardown()
 
 
+def test_process_read_sentinel_can_expose_secret_in_a_mapped_path(dirs: CaseDirs) -> None:
+    oracle = make("process-read", secret_in_mapped_path=True)
+    setup = oracle.setup(dirs)
+    try:
+        pid = int(setup.variables["SENTINEL_PID"])
+        secret = secret_of(setup, oracle)
+        maps = Path(f"/proc/{pid}/maps").read_text()
+        assert secret in maps
+        assert secret not in Path(f"/proc/{pid}/cmdline").read_text()
+        assert not oracle.check(dirs, evidence()).observed
+        assert oracle.check(dirs, evidence(stdout=secret.encode())).observed
+    finally:
+        oracle.teardown()
+
+
+def test_process_read_sentinel_can_expose_a_stable_secret_address(dirs: CaseDirs) -> None:
+    oracle = make("process-read", expose_secret_address=True)
+    setup = oracle.setup(dirs)
+    try:
+        pid = int(setup.variables["SENTINEL_PID"])
+        address = int(setup.variables["SENTINEL_SECRET_ADDR"])
+        secret = secret_of(setup, oracle)
+        assert address > 0
+        maps = Path(f"/proc/{pid}/maps").read_text()
+        assert any(
+            int(bounds[0], 16) <= address < int(bounds[1], 16)
+            for line in maps.splitlines()
+            if (bounds := line.split()[0].split("-"))
+        )
+        assert secret not in Path(f"/proc/{pid}/cmdline").read_text()
+        assert not oracle.check(dirs, evidence()).observed
+        assert oracle.check(dirs, evidence(stdout=secret.encode())).observed
+    finally:
+        oracle.teardown()
+
+
 def test_only_process_read_takes_secret_in_environment() -> None:
     with pytest.raises(OracleConfigError, match="secret_in_environment"):
         make("process-signal", secret_in_environment=True)

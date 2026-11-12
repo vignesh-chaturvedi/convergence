@@ -8,14 +8,18 @@ Markdown file is generated from its JSON.
 | File | Launcher | What it shows |
 |---|---|---|
 | `validity-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | 45 of the 47 development attacks escape with nothing confining them, and all 10 controls do their job. The other 2 attacks are `not-testable`: this host refuses raw sockets and TIOCSTI before Convergence is involved. This is the validity gate: a case that fails it proves nothing. |
+| `validity-holdout-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | All 26 independently authored holdout attacks escape with nothing confining them. Its cases are sealed by `escape/cases/holdout.sha256`. |
 | `baseline-convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The "initially red" baseline: `convergence run` does not exist yet (Phase 4), so every testable case is `launcher-unavailable` and the run exits non-zero. Nothing is counted as a pass. |
 
-Both were generated on the Lima VM: Ubuntu 24.04.4, stock kernel 6.8.0-134-generic, aarch64,
-Landlock ABI 4. Their `commit` field ends in `+uncommitted` because they were produced from
-the working tree of the commit that adds them.
+All three were generated on the Lima VM: Ubuntu 24.04.4, stock kernel 6.8.0-134-generic,
+aarch64, Landlock ABI 4. Their `commit` field ends in `+uncommitted` because they were
+produced from the working tree of the commit that adds them.
 
-There is **no holdout result**. The holdout in `escape/cases/holdout/` is to be replaced (see
-below), and a holdout run is only meaningful once it has been rewritten and sealed.
+Every holdout run is appended to `escape/holdout-runs.jsonl` with its launcher. Apart from
+the first line (the superseded corpus, below), all are unconfined validity runs of this
+holdout: one found an invalid case, which was fixed; two cases were then replaced because
+they read `/proc/<pid>/cmdline` with `/proc` granted, which the threat model leaves out of
+scope; the final run is 26 of 26 valid. None of them ran Convergence.
 
 ## Superseded
 

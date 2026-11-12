@@ -1,8 +1,8 @@
 {
   "schema": "convergence.escape-report/1",
   "environment": {
-    "timestamp": "2026-11-12T04:18:01+00:00",
-    "commit": "d9633333a402d1c734522679a5c00ba1436954b1+uncommitted",
+    "timestamp": "2026-11-12T07:10:59+00:00",
+    "commit": "12415a134eb52817d080aea400e966ae49fa7b93+uncommitted",
     "kernel": "6.8.0-134-generic",
     "arch": "aarch64",
     "os": "Ubuntu 24.04.4 LTS",
@@ -12,9 +12,9 @@
     "launcher": "convergence"
   },
   "summary": {
-    "cases": 50,
+    "cases": 57,
     "counts": {
-      "launcher-unavailable": 48,
+      "launcher-unavailable": 55,
       "not-testable": 2
     },
     "escape_rate": {
@@ -61,9 +61,9 @@
       "not_testable_on_this_host": []
     },
     "dev": {
-      "cases": 40,
+      "cases": 47,
       "counts": {
-        "launcher-unavailable": 38,
+        "launcher-unavailable": 45,
         "not-testable": 2
       },
       "escape_rate": {
@@ -135,6 +135,21 @@
     },
     {
       "id": "exec-disallowed-001",
+      "set": "dev",
+      "category": "exec-disallowed",
+      "kind": "attack",
+      "mechanism": "landlock-fs",
+      "min_abi": 1,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "exec-disallowed-002",
       "set": "dev",
       "category": "exec-disallowed",
       "kind": "attack",
@@ -254,6 +269,21 @@
       "stderr_tail": ""
     },
     {
+      "id": "filesystem-read-003",
+      "set": "dev",
+      "category": "filesystem-read",
+      "kind": "attack",
+      "mechanism": "landlock-fs",
+      "min_abi": 1,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
       "id": "filesystem-write-001",
       "set": "dev",
       "category": "filesystem-write",
@@ -284,6 +314,21 @@
       "stderr_tail": ""
     },
     {
+      "id": "filesystem-write-003",
+      "set": "dev",
+      "category": "filesystem-write",
+      "kind": "attack",
+      "mechanism": "landlock-fs",
+      "min_abi": 1,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
       "id": "io-uring-bypass-001",
       "set": "dev",
       "category": "io-uring-bypass",
@@ -300,6 +345,21 @@
     },
     {
       "id": "mount-namespace-001",
+      "set": "dev",
+      "category": "mount-namespace",
+      "kind": "attack",
+      "mechanism": "seccomp",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "mount-namespace-002",
       "set": "dev",
       "category": "mount-namespace",
       "kind": "attack",
@@ -395,6 +455,51 @@
       "kind": "attack",
       "mechanism": "supervisor",
       "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "persist-setsid-doublefork-002",
+      "set": "dev",
+      "category": "persist-setsid-doublefork",
+      "kind": "attack",
+      "mechanism": "supervisor",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "proc-other-pid-001",
+      "set": "dev",
+      "category": "proc-other-pid",
+      "kind": "attack",
+      "mechanism": "landlock-fs + ptrace-domain",
+      "min_abi": 1,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "proc-other-pid-002",
+      "set": "dev",
+      "category": "proc-other-pid",
+      "kind": "attack",
+      "mechanism": "landlock-fs + ptrace-domain",
+      "min_abi": 1,
       "result": "launcher-unavailable",
       "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
       "elapsed": null,

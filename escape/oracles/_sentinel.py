@@ -1,13 +1,17 @@
 """A harness-owned target process for the process oracles. Run as a script, stdlib only.
 
-usage: python -I _sentinel.py {hold|hold-env|signal} {allow_ptrace 0|1}
+usage: python -I _sentinel.py {hold|hold-env|hold-map|hold-address|signal} {allow_ptrace 0|1}
 stdin, one line:  hold:     <secret>
                   hold-env: ignored (secret comes from CONVERGENCE_SENTINEL_SECRET)
+                  hold-map: ignored (secret is encoded in the mapped file's path)
+                  hold-address: <secret>
                   signal:   <secret> <report-path>
 
 hold:     keeps <secret> in memory only (never in argv or the environment).
 hold-env: keeps the secret it was given in its environment, so /proc/<pid>/environ shows
           it as well as /proc/<pid>/mem.
+hold-map: keeps a file mapping open so /proc/<pid>/maps exposes its path.
+hold-address: keeps a stable in-memory copy and reports its address to the oracle.
 signal:   on SIGUSR1, appends <secret> to <report-path>, a host file the oracle checks.
 
 With allow_ptrace=1 the sentinel opts in to being traced by any process of the same user
@@ -18,6 +22,7 @@ Prints "ready <pid>" once set up, then sleeps until killed.
 """
 
 import ctypes
+import mmap
 import os
 import signal
 import sys
@@ -37,10 +42,21 @@ def main() -> None:
         libc.prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0)  # EINVAL without Yama: fine
 
     held = bytearray()
+    secret_address: int | None = None
+    mapping: mmap.mmap | None = None
     if mode == "hold":
         held += line.encode()
     elif mode == "hold-env":
         held += os.environ["CONVERGENCE_SENTINEL_SECRET"].encode()
+    elif mode == "hold-map":
+        mapping = mmap.mmap(
+            int(os.environ["CONVERGENCE_SENTINEL_MAP_FD"]), 0, access=mmap.ACCESS_READ
+        )
+        held += mapping[:]
+    elif mode == "hold-address":
+        held += line.encode()
+        address_buffer = ctypes.create_string_buffer(line.encode())
+        secret_address = ctypes.addressof(address_buffer)
     elif mode == "signal":
         secret, report = line.split(" ", 1)
 
@@ -54,7 +70,8 @@ def main() -> None:
         sys.stderr.write(f"unknown mode {mode}\n")
         os._exit(2)
 
-    sys.stdout.write(f"ready {os.getpid()}\n")
+    suffix = f" {secret_address}" if secret_address is not None else ""
+    sys.stdout.write(f"ready {os.getpid()}{suffix}\n")
     sys.stdout.flush()
     while True:
         signal.pause()

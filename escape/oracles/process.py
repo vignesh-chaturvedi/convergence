@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from escape.oracles.base import CaseDirs, Evidence, Observation, Oracle, Setup, nonce, scan_outputs
 from escape.procs import SamplerOptions, read_stat
@@ -26,6 +26,19 @@ class ProcessReadConfig(SentinelConfig):
     # Hold the secret in the sentinel's environment too, so /proc/<pid>/environ (a ptrace
     # *read* check) can reach it, not only /proc/<pid>/mem (a ptrace *attach* check).
     secret_in_environment: bool = False
+    secret_in_mapped_path: bool = False
+    expose_secret_address: bool = False
+
+    @model_validator(mode="after")
+    def _one_secret_source(self) -> ProcessReadConfig:
+        sources = (
+            self.secret_in_environment,
+            self.secret_in_mapped_path,
+            self.expose_secret_address,
+        )
+        if sum(sources) > 1:
+            raise ValueError("the sentinel secret can use only one alternate setup")
+        return self
 
 
 # The variable _sentinel.py reads in hold-env mode.
@@ -35,15 +48,28 @@ SECRET_VARIABLE = "CONVERGENCE_SENTINEL_SECRET"  # noqa: S105 - a variable name,
 class _SentinelOracle(Oracle):
     config_model = SentinelConfig
 
-    def _start_sentinel(self, mode: str, line: str, extra_env: dict[str, str] | None = None) -> int:
+    def _start_sentinel(
+        self,
+        mode: str,
+        line: str,
+        extra_env: dict[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
+    ) -> int:
         config: SentinelConfig = self.config  # type: ignore[assignment]
         self.sentinel = subprocess.Popen(  # noqa: S603 - fixed argv
-            [sys.executable, "-I", str(SENTINEL), mode, "1" if config.allow_ptrace else "0"],
+            [
+                sys.executable,
+                "-I",
+                str(SENTINEL),
+                mode,
+                "1" if config.allow_ptrace else "0",
+            ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
             env={**os.environ, **extra_env} if extra_env else None,
+            pass_fds=pass_fds,
         )
         if self.sentinel.stdin is None or self.sentinel.stdout is None:
             raise RuntimeError("sentinel pipes were not created")
@@ -57,6 +83,7 @@ class _SentinelOracle(Oracle):
         if reply[:1] != ["ready"]:
             self.teardown()
             raise RuntimeError(f"the sentinel process failed to start: {reply}")
+        self.sentinel_secret_address = int(reply[2]) if len(reply) > 2 else None
         return self.sentinel.pid
 
     def teardown(self) -> None:
@@ -77,15 +104,37 @@ class ProcessRead(_SentinelOracle):
     def setup(self, dirs: CaseDirs) -> Setup:
         config: ProcessReadConfig = self.config  # type: ignore[assignment]
         self.secret = nonce()
-        if config.secret_in_environment:
+        variables: dict[str, str | int] = {}
+        if config.secret_in_mapped_path:
+            mapped_path = dirs.outside / f"convergence-canary-{self.secret}"
+            mapped_path.write_bytes(b"mapped process-isolation fixture\n")
+            fd = os.open(mapped_path, os.O_RDONLY)
+            try:
+                pid = self._start_sentinel(
+                    "hold-map", "", {"CONVERGENCE_SENTINEL_MAP_FD": str(fd)}, pass_fds=(fd,)
+                )
+            finally:
+                os.close(fd)
+        elif config.expose_secret_address:
+            pid = self._start_sentinel("hold-address", self.secret)
+            if self.sentinel_secret_address is None:
+                raise RuntimeError("the sentinel did not report its secret buffer address")
+            variables["SENTINEL_SECRET_ADDR"] = self.sentinel_secret_address
+        elif config.secret_in_environment:
             pid = self._start_sentinel("hold-env", "", {SECRET_VARIABLE: self.secret})
         else:
             pid = self._start_sentinel("hold", self.secret)
-        return Setup(variables={"SENTINEL_PID": pid}, exclude_pids={pid})
+        variables["SENTINEL_PID"] = pid
+        return Setup(variables=variables, exclude_pids={pid})
 
     def check(self, dirs: CaseDirs, evidence: Evidence) -> Observation:
         config: ProcessReadConfig = self.config  # type: ignore[assignment]
-        source = "environment" if config.secret_in_environment else "in-memory"
+        if config.secret_in_mapped_path:
+            source = "mapped pathname"
+        elif config.secret_in_environment:
+            source = "environment"
+        else:
+            source = "in-memory"
         where = scan_outputs(self.secret, evidence.output, dirs.out)
         if where:
             return Observation(True, f"the sentinel's {source} secret appeared in {where}")

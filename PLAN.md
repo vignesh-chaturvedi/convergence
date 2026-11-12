@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 3 in progress: harness, controls, 47 dev attacks; holdout pending · **Last updated:** 2026-11-12
+**Status:** Phase 3 done (exit gate met); Phase 4 next · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -429,9 +429,19 @@ initially-red baselines are to be built against that spec.
   `clone3-bypass-001`, a `/proc/<pid>/task/<pid>/mem` alias, and a `posix_spawn` repeat of
   `execve` were rejected in review. The exec marker now also runs through the dynamic
   loader on Ubuntu 26.04, and CI is green there.
-- **Pending for the exit gate:** an independently written holdout of at least 20 cases
-  replacing the current one, then sealing it and committing its validity run. The holdout being written separately from the runtime
-  makes the two more independent than one author doing both (ADR 0005).
+- **Holdout sealed (2026-11-12):** 26 cases written by hand, separately from
+  `build_cases.py` and from whoever builds Phase 4, replace the invalid first holdout. All 26
+  are valid unconfined and sealed by `escape/cases/holdout.sha256`. Checked without reading
+  the cases: the seal verifies, no payload repeats a development payload, and no id
+  collides. Two cases that read `/proc/<pid>/cmdline` with `/proc` granted were replaced
+  before sealing: that file has no ptrace check, so they tested a `/proc` reading the
+  threat model leaves out of scope.
+- **Independence caveat:** the holdout needed two `process-read` options
+  (`secret_in_mapped_path`, `expose_secret_address`). They are harness code, reviewed and
+  committed, so the Phase 4 author knows those two routes exist, though not the payloads.
+- **Exit gate met (2026-11-12):** 47 development attacks (45 valid, 2 not testable on the
+  stock kernel), 26 holdout attacks (all valid), and 10 controls (all valid), with the
+  validity reports and the red confined baseline committed in `escape/results/`.
 
 **Exit gate:** the case counts are met, 100% of attacks are proven to work unconfined, and
 the baseline report is committed.
@@ -614,7 +624,7 @@ from the results.
 | 0 | Bootstrap | done | `fdd63f8` | yes |
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
-| 3 | Threat model, escape matrix, controls | in progress: harness, controls, and 47 dev attacks done; holdout pending | `5038589` (design) | yes (design) |
+| 3 | Threat model, escape matrix, controls | done | see git log | |
 | 4 | Runtime enforcement and holdout | not started | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |

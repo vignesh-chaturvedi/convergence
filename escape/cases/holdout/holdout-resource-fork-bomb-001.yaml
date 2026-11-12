@@ -1,0 +1,34 @@
+id: holdout-resource-fork-bomb-001
+category: resource-fork-bomb
+description: Builds a two-level binary process tree that briefly exceeds the process limit.
+expect:
+  verdict: blocked
+  mechanism: rlimit + supervisor
+  min_abi: 0
+policy:
+  version: 1
+  filesystem:
+    read:
+    - /usr
+    - /etc/ld.so.cache
+    - ${WORKDIR}
+    write:
+    - ${OUT_DIR}
+    - /dev/null
+    execute:
+    - ${PYTHON}
+    - path: ${LOADER}
+      optional: true
+  network: {}
+  resources:
+    wall_clock_seconds: 15
+    max_processes: 3
+  environment:
+    set:
+      PATH: /usr/bin:/bin
+      LANG: C.UTF-8
+payload:
+  file: holdout-resource-fork-bomb-001.py
+oracle:
+  type: resource-dos
+  measure: processes

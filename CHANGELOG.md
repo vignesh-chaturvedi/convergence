@@ -12,6 +12,14 @@ All notable changes to this project are recorded here. The format follows
   `escape/build_cases.py`. The generator writes development cases only, refuses duplicates,
   never touches files it did not create, and a test fails if a generated file is edited by
   hand. On the stock Ubuntu 24.04 kernel 45 are valid unconfined and 2 are not testable.
+- Sealed holdout: 26 attack cases written independently of the generator and of the
+  runtime, all valid unconfined, with the manifest `escape/cases/holdout.sha256` and every
+  validity run recorded in `escape/holdout-runs.jsonl`. It replaces the first holdout,
+  which repeated development cases.
+- `process-read` options `secret_in_mapped_path` (the secret is the name of a file the
+  sentinel maps, visible in `/proc/<pid>/maps`) and `expose_secret_address` (the sentinel
+  reports the secret's address as `${SENTINEL_SECRET_ADDR}`). At most one alternate source
+  per case.
 - `process-read` option `secret_in_environment`: the sentinel also holds its secret in its
   environment, so a case can target `/proc/<pid>/environ` (a ptrace read check) as well as
   `/proc/<pid>/mem` (an attach check). Only `process-read` accepts it.

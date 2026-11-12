@@ -1,0 +1,35 @@
+id: holdout-exec-disallowed-001
+category: exec-disallowed
+description: Executes the readable marker through its inherited /proc/self/fd path.
+expect:
+  verdict: blocked
+  mechanism: landlock-fs
+  min_abi: 1
+policy:
+  version: 1
+  filesystem:
+    read:
+    - /usr
+    - /etc/ld.so.cache
+    - ${WORKDIR}
+    - ${MARKER_DIR}
+    - /proc
+    write:
+    - ${OUT_DIR}
+    - /dev/null
+    execute:
+    - ${PYTHON}
+    - path: ${LOADER}
+      optional: true
+  network: {}
+  resources:
+    wall_clock_seconds: 30
+  environment:
+    set:
+      PATH: /usr/bin:/bin
+      LANG: C.UTF-8
+payload:
+  file: holdout-exec-disallowed-001.py
+oracle:
+  type: exec-probe
+  marker: elf

@@ -52,11 +52,14 @@ class Row:
     varied_input_evidence: str
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(("127.0.0.1", 0))
-        port: int = probe.getsockname()[1]
-    return port
+def _free_port(avoid: int | None = None) -> int:
+    """A free port. ``avoid`` is one it must differ from: the kernel can pick it again."""
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port: int = probe.getsockname()[1]
+        if port != avoid:
+            return port
 
 
 def _hook(variant: str, port: int, secret: str) -> Any:
@@ -113,7 +116,7 @@ def measure(path: Path, case: Case, work: Path, policies: Path | None) -> Row:
 
     same = runner(PolicyLauncher(policy), "A", port_a, secret_a).run_case(path, case, "controls")
     row.same_input, row.same_input_evidence = same.result.value, same.evidence
-    varied = runner(PolicyLauncher(policy), "B", _free_port(), nonce()).run_case(
+    varied = runner(PolicyLauncher(policy), "B", _free_port(avoid=port_a), nonce()).run_case(
         path, case, "controls"
     )
     row.varied_input, row.varied_input_evidence = varied.result.value, varied.evidence

@@ -225,11 +225,22 @@ def probe_landlock_truncate(ctx: ProbeContext) -> ProbeResult:
     )
 
 
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        port: int = s.getsockname()[1]
-        return port
+def _free_ports(count: int) -> list[int]:
+    """``count`` different free ports.
+
+    Every port stays bound until all are chosen. Picked one after another, each released
+    before the next, the kernel can hand out the same port twice.
+    """
+    held: list[socket.socket] = []
+    try:
+        for _ in range(count):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            held.append(s)
+            s.bind(("127.0.0.1", 0))
+        return [s.getsockname()[1] for s in held]
+    finally:
+        for s in held:
+            s.close()
 
 
 def probe_landlock_net_tcp(ctx: ProbeContext) -> ProbeResult:
@@ -241,8 +252,7 @@ def probe_landlock_net_tcp(ctx: ProbeContext) -> ProbeResult:
     denied_listener.setblocking(False)
     allowed_port = allowed_listener.getsockname()[1]
     denied_port = denied_listener.getsockname()[1]
-    bind_ok_port = _free_port()
-    bind_denied_port = _free_port()
+    bind_ok_port, bind_denied_port = _free_ports(2)
     tcp = ll.AccessNet.BIND_TCP | ll.AccessNet.CONNECT_TCP
 
     def connect(port: int) -> None:

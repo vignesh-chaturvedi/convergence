@@ -1,0 +1,146 @@
+{
+  "schema": "convergence.fdr/1",
+  "environment": {
+    "timestamp": "2026-11-12T11:06:56+00:00",
+    "commit": "764c6c95e53a3269e65ca92b997339f2cff3db18+uncommitted",
+    "kernel": "6.8.0-134-generic",
+    "arch": "aarch64",
+    "os": "Ubuntu 24.04.4 LTS",
+    "landlock_abi": 4,
+    "python": "3.12.3",
+    "convergence_version": "0.1.0.dev0",
+    "launcher": "generated-policy"
+  },
+  "same_input": {
+    "numerator": 0,
+    "denominator": 10,
+    "value": 0.0,
+    "wilson_95": [
+      0.0,
+      0.2775327998628892
+    ],
+    "text": "0/10 (0.0%; Wilson 95% CI 0.0-27.8%)"
+  },
+  "varied_input": {
+    "numerator": 3,
+    "denominator": 10,
+    "value": 0.3,
+    "wilson_95": [
+      0.10779126740630099,
+      0.6032218525388546
+    ],
+    "text": "3/10 (30.0%; Wilson 95% CI 10.8-60.3%)"
+  },
+  "controls": [
+    {
+      "id": "control-python-read-write",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/output.txt",
+      "rules": 15,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/output.txt",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/output.txt"
+    },
+    {
+      "id": "control-git-log",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in stdout",
+      "rules": 17,
+      "warnings": 5,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in stdout",
+      "varied_input": "false-denial",
+      "varied_input_evidence": "the input's marker did not reach the expected output"
+    },
+    {
+      "id": "control-shell-pipeline",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/output.txt",
+      "rules": 19,
+      "warnings": 3,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/output.txt",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/output.txt"
+    },
+    {
+      "id": "control-tar-gzip",
+      "observed": "pass",
+      "observed_evidence": "work.tar.gz contains ./module.py with the marker",
+      "rules": 16,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "work.tar.gz contains ./module.py with the marker",
+      "varied_input": "pass",
+      "varied_input_evidence": "work.tar.gz contains ./module.py with the marker"
+    },
+    {
+      "id": "control-python-sqlite",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/notes.db",
+      "rules": 16,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/notes.db",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/notes.db"
+    },
+    {
+      "id": "control-json-tool",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/output.txt",
+      "rules": 15,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/output.txt",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/output.txt"
+    },
+    {
+      "id": "control-py-compile",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/module.pyc",
+      "rules": 15,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/module.pyc",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/module.pyc"
+    },
+    {
+      "id": "control-http-client-allowed-port",
+      "observed": "pass",
+      "observed_evidence": "1 event(s) at the sink; first: TCP connection from 127.0.0.1:41460",
+      "rules": 17,
+      "warnings": 1,
+      "same_input": "pass",
+      "same_input_evidence": "1 event(s) at the sink; first: TCP connection from 127.0.0.1:41470",
+      "varied_input": "false-denial",
+      "varied_input_evidence": "the sink received nothing"
+    },
+    {
+      "id": "control-tcp-server-allowed-port",
+      "observed": "pass",
+      "observed_evidence": "the harness got the marker back from port 59011",
+      "rules": 15,
+      "warnings": 1,
+      "same_input": "pass",
+      "same_input_evidence": "the harness got the marker back from port 59011",
+      "varied_input": "false-denial",
+      "varied_input_evidence": "the harness never got the marker back from port 55543"
+    },
+    {
+      "id": "control-subprocess-spawn",
+      "observed": "pass",
+      "observed_evidence": "the input's marker came through in out/output.txt",
+      "rules": 17,
+      "warnings": 2,
+      "same_input": "pass",
+      "same_input_evidence": "the input's marker came through in out/output.txt",
+      "varied_input": "pass",
+      "varied_input_evidence": "the input's marker came through in out/output.txt"
+    }
+  ]
+}

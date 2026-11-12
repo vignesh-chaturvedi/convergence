@@ -65,6 +65,14 @@ def test_opens_are_classified_by_flags() -> None:
     ]
 
 
+def test_device_decorations_are_dropped() -> None:
+    events = collect(
+        'openat(AT_FDCWD</w>, "/dev/null", O_RDWR) = 3</dev/null<char 1:3>>',
+        "getdents64(4</w/d>, 0x1 /* 2 entries */, 32768) = 48",
+    )
+    assert [(e.op, e.path) for e in events] == [("write", "/dev/null"), ("readdir", "/w/d")]
+
+
 def test_identical_events_are_merged_and_counted() -> None:
     line = 'openat(AT_FDCWD</w>, "a", O_RDONLY) = 3</w/a>'
     events = collect(line, line, line)
@@ -165,6 +173,17 @@ def test_exact_grants_variables_and_parent_dirs(tree: Path) -> None:
     assert "/etc/shadow was refused" in text
     assert generated.policy["environment"]["pass"] == ["PATH", "HOME"]
     parse_policy(render(generated))
+
+
+def test_pseudo_devices_are_granted_write(tree: Path) -> None:
+    events = [
+        ev(1, "read", "/dev/urandom"),
+        ev(2, "read", "/dev/null"),
+        ev(3, "write", "/dev/null"),
+    ]
+    fs = generate(observation(events, tree)).policy["filesystem"]
+    assert fs["read"] == []
+    assert fs["write"] == ["/dev/null", "/dev/urandom"]
 
 
 def test_runtime_trees_collapse_with_a_count(tree: Path) -> None:

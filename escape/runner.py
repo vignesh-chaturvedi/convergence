@@ -27,7 +27,7 @@ import stat
 import sys
 import tempfile
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +37,14 @@ from convergence.kernel import landlock as ll
 from convergence.policy.load import PolicyError, parse_policy
 from escape import report, seal
 from escape.expand import UnknownVariable, VarValue, expand, expand_string
-from escape.launchers import LAUNCHERS, ConvergenceLauncher, LaunchSpec, UnconfinedLauncher
+from escape.launchers import (
+    LAUNCHERS,
+    ConvergenceLauncher,
+    Launcher,
+    LaunchSpec,
+)
 from escape.oracles import CaseDirs, Evidence, OracleConfigError, create
-from escape.oracles.base import scan_outputs
+from escape.oracles.base import Oracle, scan_outputs
 from escape.oracles.execution import find_loader
 from escape.preconditions import Availability, Precondition, probe, probe_all
 from escape.procs import Sampler, become_subreaper, kill_all, reap_zombie_children
@@ -89,13 +94,20 @@ def kernel_abi() -> int | None:
 class Runner:
     def __init__(
         self,
-        launcher: UnconfinedLauncher | ConvergenceLauncher,
+        launcher: Launcher,
         *,
         subreaper: bool = True,
         preconditions: Iterable[Precondition] = (),
+        case_root: Callable[[Case], Path] | None = None,
+        oracle_hook: Callable[[Oracle], None] | None = None,
     ) -> None:
         self.launcher = launcher
         self.known_limitations = load_known_limitations()
+        # Used by the false-denial harness: a stable directory per case, so paths recorded
+        # while observing still exist when the generated policy runs; and a hook that picks
+        # the input variant and port before the oracle sets up.
+        self.case_root = case_root
+        self.oracle_hook = oracle_hook
         self.abi = kernel_abi()
         self.python = _python()
         self._caps: Any = None
@@ -162,13 +174,21 @@ class Runner:
             result.result, result.evidence = Result.LAUNCHER_UNAVAILABLE, reason
             return result
 
-        root = Path(tempfile.mkdtemp(prefix="convergence-escape-"))
+        if self.case_root is not None:
+            root = self.case_root(case)
+            if root.exists():
+                _remove_tree(root)
+            root.mkdir(parents=True, mode=0o700)
+        else:
+            root = Path(tempfile.mkdtemp(prefix="convergence-escape-"))
         oracle = None
         try:
             dirs = CaseDirs.create(root)
             scratch = root / "scratch"
             scratch.mkdir(mode=0o700)
             oracle = create(case.oracle)
+            if self.oracle_hook is not None:
+                self.oracle_hook(oracle)
             setup = oracle.setup(dirs)
             reached_token = "convergence-reached-" + secrets.token_hex(8)
             variables = self._base_variables(dirs, reached_token) | setup.variables

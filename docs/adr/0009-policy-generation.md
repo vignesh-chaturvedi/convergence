@@ -25,6 +25,11 @@ rule. `--rationale` writes the full mapping as JSON.
 | a program executed | `execute` on it, plus its ELF interpreter (`PT_INTERP`) or `#!` interpreter |
 
 - Paths are the real paths the kernel resolved, since Landlock rules attach to inodes.
+- The pseudo-devices `/dev/null`, `/dev/zero`, `/dev/full`, `/dev/random`, and
+  `/dev/urandom` are granted `write` even when only read. Before Landlock ABI 5 a read-only
+  device grant cannot be enforced exactly, since ioctl is not controlled, and `run` refuses
+  it. Every user may already write to these devices, and a write grant includes ioctl.
+  (Found by the same-input false-denial measurement.)
 - Paths under the working directory become `${CWD}/...`, and paths under the home directory
   `${HOME}/...`, so the policy works from another checkout.
 - Failed opens grant nothing: a missing file needs no rule, and an `EACCES` from file

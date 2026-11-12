@@ -113,7 +113,8 @@ class NetworkSink(Oracle):
             family = socket.AF_INET6 if config.family == "ipv6" else socket.AF_INET
             host = "::1" if config.family == "ipv6" else "127.0.0.1"
             self.sock = socket.socket(family, kind)
-            self.sock.bind((host, 0))
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.sock.bind((host, self.fixed_port or 0))
             variables["SINK_HOST"] = host
             variables["SINK_PORT"] = int(self.sock.getsockname()[1])
             self.label = "TCP" if kind == socket.SOCK_STREAM else "UDP"
@@ -190,9 +191,12 @@ class ServerReachable(Oracle):
 
     def setup(self, dirs: CaseDirs) -> Setup:
         self.secret = nonce()
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.bind(("127.0.0.1", 0))
-            self.port: int = probe.getsockname()[1]
+        if self.fixed_port:
+            self.port: int = self.fixed_port
+        else:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                probe.bind(("127.0.0.1", 0))
+                self.port = probe.getsockname()[1]
         self.response = bytearray()
         self.reached = threading.Event()
         self._stop = threading.Event()

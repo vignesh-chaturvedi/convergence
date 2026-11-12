@@ -83,6 +83,11 @@ class Observation:
 class Oracle(ABC):
     type_name: ClassVar[str]
     config_model: ClassVar[type[BaseModel]] = NoConfig
+    # Set only by the false-denial harness (escape/fdr.py), never by a case: which input
+    # the workload gets ("A" as observed, "B" varied), and a port to reuse across runs.
+    variant: str = "A"
+    fixed_port: int | None = None
+    fixed_secret: str | None = None  # so "the same input" is byte for byte the same
 
     def __init__(self, config: dict[str, Any]) -> None:
         # Validate through JSON, as cases and policies are: strict, but arrays are accepted

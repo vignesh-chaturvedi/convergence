@@ -281,3 +281,54 @@ LAUNCHERS: dict[str, type[UnconfinedLauncher] | type[ConvergenceLauncher]] = {
     "unconfined": UnconfinedLauncher,
     "convergence": ConvergenceLauncher,
 }
+
+
+def _expanded_argv(spec: LaunchSpec) -> list[str]:
+    """The payload with ${HOME}, ${CWD}, ${SCRATCH} resolved to the run's stable paths."""
+    return [
+        expand_policy_variables(a, spec.home, str(spec.cwd), str(spec.scratch)) for a in spec.argv
+    ]
+
+
+class ObserveLauncher:
+    """``convergence observe`` for the false-denial harness: unconfined, under strace.
+
+    The argv is expanded to the case's own paths, so that the policy generated from the
+    observation names the same paths the confined runs will use.
+    """
+
+    name = "observe"
+    overhead_processes = 2  # observe's supervisor and strace
+
+    def __init__(self, out: Path) -> None:
+        self.out = out
+
+    def unavailable_reason(self) -> str | None:
+        from convergence.runtime.tracer import find_strace
+
+        return None if find_strace() else "strace is not installed"
+
+    def start(self, spec: LaunchSpec) -> Running:
+        wall = spec.policy.resources.wall_clock_seconds
+        argv = [sys.executable, "-m", "convergence", "observe", "--out", str(self.out)]
+        argv += ["--timeout", str(wall), "--", *_expanded_argv(spec)]
+        return _start(argv, spec, dict(spec.supervisor_env), deadline=wall + 15)
+
+
+class PolicyLauncher:
+    """``convergence run`` with a given policy instead of the case's own (a generated one)."""
+
+    name = "generated-policy"
+    overhead_processes = 1  # the convergence supervisor
+
+    def __init__(self, policy: Path) -> None:
+        self.policy = policy
+
+    def unavailable_reason(self) -> str | None:
+        return None if self.policy.is_file() else f"no policy at {self.policy}"
+
+    def start(self, spec: LaunchSpec) -> Running:
+        wall = spec.policy.resources.wall_clock_seconds
+        argv = [sys.executable, "-m", "convergence", "run", "--no-record"]
+        argv += ["--policy", str(self.policy), "--", *_expanded_argv(spec)]
+        return _start(argv, spec, dict(spec.supervisor_env), deadline=wall + 15)

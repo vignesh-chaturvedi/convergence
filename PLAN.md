@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 5 in progress: observe and generate built · **Last updated:** 2026-11-12
+**Status:** Phase 5 done (exit gate met); Phase 6 next · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -562,8 +562,28 @@ required.
 
   End to end in the VM, a tool was observed, its policy generated, and the tool run under
   that policy with the same result. A file the observation never saw is denied.
-- **Pending:** `explain --run`; the Divergence importer (on real Divergence output); the
-  same-input and varied-input false-denial rates for the controls.
+- **`explain --run` built:** cause, rule, smallest policy change as a YAML diff, and a risk
+  note for each denial in a traced run. Baseline protections are explained, never offered
+  as a change.
+- **Divergence importer built and tested on real output:** Divergence was built in the VM
+  (Rust 1.89, `divergence-sandbox 1.1.0`, commit `8c15b5f`) and run on a benign probe
+  server written for the test. Its reports, in both formats, are committed as fixtures with
+  that provenance.
+  - Divergence's private overlay maps to `${SCRATCH}` and `${HOME}`.
+  - Decoys, secrets, and blocked attempts are never granted.
+  - Without `--baseline` the import warns that the policy will fail closed on runtime paths.
+- **False-denial rates (`escape/fdr.py`), stock 24.04 kernel:** same input 0/10, varied
+  input 3/10. The first runs found three real defects, all fixed:
+  - the harness's "same input" was not byte-identical: a new nonce, and git commit times;
+  - strace's device decoration (`</dev/null<char 1:3>>`) was parsed into the path;
+  - read-only grants on pseudo-devices are refused before Landlock ABI 5, so they are now
+    granted `write` (ADR 0009).
+
+  The CI escape job runs it, and requires a same-input rate of 0.
+- **Exit gate met:**
+  - every control passes with the same input;
+  - both rates are committed (`escape/results/fdr-*`);
+  - the importer passes on real Divergence output.
 
 **Exit gate:** every control passes with the same input, both FDR numbers are committed, and
 the importer passes on real Divergence output.
@@ -680,7 +700,7 @@ from the results.
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | done | see git log | |
 | 4 | Runtime enforcement and holdout | done | see git log | |
-| 5 | Observe, generate, importer, denial explain | in progress: observe and generate done | | |
+| 5 | Observe, generate, importer, denial explain | done | see git log | |
 | 6 | MCP server | not started | | |
 | 7 | Benchmarks | not started | | |
 | 8 | PyPI release | not started | | |

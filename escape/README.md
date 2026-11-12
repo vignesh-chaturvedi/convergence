@@ -443,5 +443,11 @@ Phase 4 decision on mitigating `chmod`/`chown`/`utime` needs.
 - **Phase 4, done:** denial capture, opt-in with `--trace` (ADR 0007). The confined matrix
   is required in CI, with `exec-via-loader-001` as its one listed known limitation.
 - **Phase 4, done:** the holdout ran once under Convergence (commit `bd4d071`). Its result
-  is committed as it came out. The holdout's earlier entries in `holdout-runs.jsonl` are
+  is committed as it came out.
+- **Phase 5, done:** [`fdr.py`](fdr.py) measures the false-denial rate of *generated*
+  policies. For each control it observes input A, generates a policy, then runs the control
+  with input A and with input B. Input B adds content, files, and git history, and moves
+  network controls to another port. It uses a fixed directory per control and two
+  harness-only oracle settings (`variant`, `fixed_port`/`fixed_secret`) that no case can set.
+  Same input 0/10, varied input 3/10. The holdout's earlier entries in `holdout-runs.jsonl` are
   unconfined validity runs, not that run.

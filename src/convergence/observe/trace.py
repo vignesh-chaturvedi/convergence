@@ -23,9 +23,11 @@ LINE = re.compile(
 UNFINISHED = re.compile(r"^(?P<head>[a-z_][a-z_0-9]*\(.*?)\s*<unfinished \.\.\.>$")
 RESUMED = re.compile(r"^<\.\.\. (?P<name>[a-z_][a-z_0-9]*) resumed>(?P<tail>.*)$")
 STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
-BASE_DIR = re.compile(r"^(?:AT_FDCWD|\d+)<(?P<dir>[^>]*)>")
-FD_PATH = re.compile(r"^\d+<(?P<path>[^>]*)>")
-RETURN_PATH = re.compile(r"^<(?P<path>[^>]*)>")
+# With -yy a device is decorated twice: 3</dev/null<char 1:3>>. The inner part is dropped.
+_DECORATED = r"(?P<path>[^<>]*)(?:<(?:char|block) \d+:\d+>)?"
+BASE_DIR = re.compile(r"^(?:AT_FDCWD|\d+)<" + _DECORATED.replace("path", "dir") + ">")
+FD_PATH = re.compile(r"^\d+<" + _DECORATED + ">")
+RETURN_PATH = re.compile(r"^<" + _DECORATED + ">")
 ERRNO = re.compile(r"^\s*(?P<errno>E[A-Z0-9]+)\b")
 SOCKET_KIND = re.compile(r"^\d+<(?P<kind>TCP|UDP|UNIX)[A-Za-z0-9-]*:")
 PORT = re.compile(r"sin6?_port=htons\((?P<port>\d+)\)")

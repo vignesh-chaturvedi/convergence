@@ -99,7 +99,26 @@ disposable VM ([ADR 0008](docs/adr/0008-observation-mechanism.md)).
 - credential locations, other processes' `/proc` entries, and unix-socket connections are
   never granted, only reported.
 
-The policy fails closed on code paths the observation did not see.
+The policy fails closed on code paths the observation did not see. Measured on the 10 benign
+controls, each observed once and run under its generated policy
+([report](escape/results/fdr-lima-ubuntu-24.04-ga-aarch64.md)):
+
+| Input | False-denial rate |
+|---|---|
+| the same input it was observed with | 0/10 |
+| a different input: more files, more git history, another port | 3/10 |
+
+The second number is how incomplete a single observation is. Observe a tool on the inputs it
+will really get, then use `run --trace` and `explain --run` for what was missed:
+`convergence explain --run ID` shows each denial's cause, the rule behind it, the smallest
+policy change that would permit it, and its risk. It never changes the policy.
+
+`convergence import divergence REPORT` turns a
+[Divergence](https://github.com/vignesh-chaturvedi/divergence) dynamic-tier report into an
+observation for `generate`, without running the tool outside a sandbox. Divergence drops
+runtime noise, so the import is partial: merge a runtime baseline (`--baseline`), or the
+policy fails closed on the interpreter's own paths. Decoys, secrets, and blocked attempts
+are never granted.
 
 ## Policies: `validate` and `explain`
 

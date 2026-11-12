@@ -170,6 +170,12 @@ jobs:
         run: >
           uv run --locked python -m escape.runner run --launcher convergence
           --set dev --set controls --json out/confined.json --markdown out/confined.md
+      - name: strace (for observe mode)
+        run: command -v strace || (sudo apt-get update -qq && sudo apt-get install -y -qq strace)
+      - name: False-denial rates of generated policies (same input must be 0)
+        run: >
+          uv run --locked python -m escape.fdr --json out/fdr.json --markdown out/fdr.md
+          --policies out/fdr-policies
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

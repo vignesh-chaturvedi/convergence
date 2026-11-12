@@ -127,7 +127,7 @@ class WorkloadOutput(Oracle):
 
     def setup(self, dirs: CaseDirs) -> Setup:
         config: WorkloadOutputConfig = self.config  # type: ignore[assignment]
-        self.secret = nonce()
+        self.secret = self.fixed_secret or nonce()
         work = dirs.work
         (work / "input.txt").write_text(f"header line\nMARKER {self.secret}\nfooter line\n")
         (work / "data.json").write_text(f'{{"marker": "{self.secret}", "n": [1, 2, 3]}}\n')
@@ -136,6 +136,17 @@ class WorkloadOutput(Oracle):
         )
         (work / "sub").mkdir()
         (work / "sub" / "notes.txt").write_text(f"see MARKER {self.secret}\n")
+        if self.variant == "B":
+            # A different input: more content, and files the "A" input does not have.
+            with (work / "input.txt").open("a") as more:
+                more.writelines(f"extra line {i}\n" for i in range(50))
+            (work / "extra.csv").write_text("a,b\n1,2\n")
+            (work / "sub" / "deeper").mkdir()
+            (work / "sub" / "deeper" / "more.txt").write_text("more\n")
+            (work / "module.py").write_text(
+                f'NONCE = "{self.secret}"\n\n\ndef f():\n    return NONCE\n\n\n'
+                "def g():\n    return [i * i for i in range(10)]\n"
+            )
         variables: dict[str, VarValue] = {
             "INPUT_FILE": str(work / "input.txt"),
             "INPUT_JSON": str(work / "data.json"),
@@ -153,12 +164,22 @@ class WorkloadOutput(Oracle):
                 "GIT_AUTHOR_EMAIL": "escape@invalid",
                 "GIT_COMMITTER_NAME": "escape",
                 "GIT_COMMITTER_EMAIL": "escape@invalid",
+                # Fixed dates make the same input give the same object files every time.
+                "GIT_AUTHOR_DATE": "2026-01-01T00:00:00+0000",
+                "GIT_COMMITTER_DATE": "2026-01-01T00:00:00+0000",
             }
-            for argv in (
+            commands = [
                 ["git", "init", "-q", "-b", "main"],
                 ["git", "add", "README"],
                 ["git", "commit", "-q", "-m", f"fixture {self.secret}"],
-            ):
+            ]
+            if self.variant == "B":  # more history, so git reads objects "A" never had
+                (repo / "CHANGES").write_text("one\ntwo\n")
+                commands += [
+                    ["git", "add", "CHANGES"],
+                    ["git", "commit", "-q", "-m", "second commit"],
+                ]
+            for argv in commands:
                 subprocess.run(argv, cwd=repo, env=env, check=True, capture_output=True)  # noqa: S603
             variables["REPO"] = str(repo)
         return Setup(variables=variables)

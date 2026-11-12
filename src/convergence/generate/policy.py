@@ -39,6 +39,10 @@ PASSED_ENVIRONMENT = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ"
 GRANTED_NET_RESULTS = frozenset(
     {"ok", "ECONNREFUSED", "ETIMEDOUT", "ENETUNREACH", "EHOSTUNREACH", "EINPROGRESS", "ECONNRESET"}
 )
+# Before Landlock ABI 5 a read-only grant on a device cannot be enforced exactly (ioctl is not
+# controlled), so `run` refuses it. Every user may already write to these pseudo-devices,
+# and a write grant includes ioctl, so they are granted write: enforceable on any ABI.
+PSEUDO_DEVICES = frozenset({"/dev/null", "/dev/zero", "/dev/full", "/dev/random", "/dev/urandom"})
 PROC_PID = re.compile(r"^/proc/(?P<pid>\d+)(?P<rest>/.*)?$")
 SYSCALL_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 BUCKETS = ("read", "write", "execute")
@@ -198,7 +202,12 @@ class _Generator:
             if mapped is None:
                 return
             path = mapped
-        if event.op == "read":
+        if event.op in ("read", "readdir") and path in PSEUDO_DEVICES:
+            self.needs[("write", path)].append(event.id)
+            self.notes[("write", path)] = (
+                "read; a pseudo-device, granted write so it is enforceable before Landlock ABI 5"
+            )
+        elif event.op == "read":
             self.needs[("read", path)].append(event.id)
         elif event.op == "readdir":
             self.dir_needs[("read", path)].append(event.id)

@@ -8,6 +8,18 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `convergence explain --run ID`: for each denial in a traced run, the cause, the rule that
+  decided it, the smallest policy change that would permit it (a YAML diff), and a risk
+  note. Never applies anything.
+- `convergence import divergence REPORT`: Divergence dynamic-tier reports
+  (`divergence.sandbox/1` or `scan --json`) as partial observations. Decoys, secrets, and
+  blocked attempts are never granted, and a runtime baseline can be merged (`--baseline`).
+  Tested on real reports from Divergence `8c15b5f`.
+- `escape/fdr.py`: false-denial rates of generated policies. Each control is observed once,
+  then run under its generated policy with the same input (0/10) and a varied input (3/10).
+  Required in CI: the same-input rate must be 0.
+- `generate` grants pseudo-devices (`/dev/null`, `/dev/urandom`, ...) `write`: a read-only
+  device grant cannot be enforced before Landlock ABI 5.
 - `convergence observe -- COMMAND`: records what a command does under strace (ADR 0008):
   - files opened, by how they were opened;
   - directories listed, created in, or removed from;

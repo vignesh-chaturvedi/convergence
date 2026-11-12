@@ -22,6 +22,10 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- `exec-probe`'s marker failed on Ubuntu 26.04, whose Rust uutils `sleep` is a multi-call
+  binary that picks its tool from its own name: copied as `marker`, it exited at once and was
+  never sampled. The copy is now named `sleep` and checked during setup. The escape job now
+  also runs on `ubuntu-latest` (Ubuntu 26.04).
 - The process sampler now includes setuid processes (their `/proc/<pid>` is owned by root),
   so `privilege-gain` can fire; the unconfined safety limit counts threads, which is what
   `RLIMIT_NPROC` charges.

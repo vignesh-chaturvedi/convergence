@@ -172,7 +172,9 @@ Details that matter:
 - **Sentinels opt in to tracing** (`PR_SET_PTRACER_ANY`, unless `allow_ptrace: false`).
   This takes Yama out of the picture, so a validity run measures whether *Convergence* stops
   the access, not whether Yama happens to.
-- **`exec-probe` with `marker: elf`** copies the system `sleep` binary to a new inode. The
+- **`exec-probe` with `marker: elf`** copies the system `sleep` binary to a new inode, named
+  `sleep` so that a multi-call coreutils (Ubuntu 26.04's Rust uutils) still runs it as sleep,
+  and checks during setup that the copy works. The
   sampler looks for that inode in executable mappings (`/proc/<pid>/maps`), which is true
   whether the marker was `execve`d or mapped by the dynamic loader, and cannot be faked by
   printing. The payload must keep it running long enough to be sampled, for example

@@ -142,8 +142,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [ubuntu-latest, ubuntu-24.04, ubuntu-24.04-arm]
         include:
+          - runner: ubuntu-latest
+            uv-sha256: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
           - runner: ubuntu-24.04
             uv-sha256: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
           - runner: ubuntu-24.04-arm

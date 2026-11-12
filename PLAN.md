@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 8 in progress: release prepared; publishing waits for the owner's PyPI setup · **Last updated:** 2026-11-12
+**Status:** all phases done; Convergence 0.1.0 is on PyPI (`convergence-sandbox`) · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -751,8 +751,14 @@ from the results.
     runs `doctor`.
   - The `v0.1.0` tag was moved to that commit, which was safe because nothing had been
     published.
-- **Pending (owner only):** pending publishers on PyPI and TestPyPI, optionally a reviewer
-  on the `pypi` environment, and the decision to push the `v0.1.0` tag.
+- **Published (2026-11-12):** `convergence-sandbox` 0.1.0 is on PyPI, as a wheel and an
+  sdist built from tag `v0.1.0` (commit `5733ecb`).
+  - The first publish attempt was refused (`invalid-publisher`), because the pypi.org
+    trusted publisher did not exist yet.
+  - Once the owner added it, re-running the failed job (run 43219845828, attempt 2)
+    published the package.
+  - A fresh `ubuntu-24.04` runner then installed `convergence-sandbox[mcp]==0.1.0` from
+    PyPI and ran `convergence doctor`, which verified Landlock.
 
 ---
 
@@ -804,4 +810,4 @@ from the results.
 | 5 | Observe, generate, importer, denial explain | done | see git log | |
 | 6 | MCP server | done | see git log | |
 | 7 | Benchmarks | done | see git log | |
-| 8 | PyPI release | prepared: waiting for PyPI trusted-publisher setup and the tag | | |
+| 8 | PyPI release | done: 0.1.0 on PyPI | `v0.1.0` | yes |

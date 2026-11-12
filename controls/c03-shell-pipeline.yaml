@@ -1,0 +1,26 @@
+id: control-shell-pipeline
+category: control
+description: A find | sort | xargs grep | sed pipeline over the project, written to a file.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: ["${OUT_DIR}", /dev/null]
+    execute:
+      - /bin/sh
+      - /usr/bin/find
+      - /usr/bin/sort
+      - /usr/bin/xargs
+      - /usr/bin/grep
+      - /usr/bin/sed
+      - {path: "${LOADER}", optional: true}
+  resources: {wall_clock_seconds: 30}
+  environment:
+    set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}
+payload:
+  argv:
+    - /bin/sh
+    - -c
+    - find "${WORKDIR}" -name '*.txt' -type f | sort | xargs grep -h MARKER | sed 's/^/found /' > "${OUT}"
+oracle: {type: workload-output, require_file: true}

@@ -1,6 +1,6 @@
 # ADR 0005 — Escape-matrix design: external oracles, validity, and a sealed holdout
 
-**Status:** accepted · **Phase:** 3 · **Date:** 2026-11-11
+**Status:** accepted · **Phase:** 3 · **Date:** 2026-11-11 (implementation notes 2026-11-12)
 
 ## Context
 
@@ -40,7 +40,10 @@ to enforce on others: a finding is the observed effect, not the claim.
 
 The runner has a launcher abstraction with two backends:
 
-- `unconfined` — a bare `subprocess`, available now;
+- `unconfined` — no sandbox: the payload inherits the launching process's whole
+  environment and any descriptors the oracle leaks, as a run with nothing protecting it
+  would. Only harness safety rlimits apply, set at four times the policy's limits so a
+  validity run can exceed the policy without taking the host down. Available now;
 - `convergence` — `convergence run` with the case's policy, available from Phase 4.
 
 Before an attack counts, it must produce **escaped** under the `unconfined` launcher: the
@@ -51,11 +54,12 @@ committed.
 
 ### The matrix is "initially failing"
 
-Under the `convergence` launcher, every attack is expected to escape until Phase 4 builds
-enforcement. That initial all-escape baseline is committed. Phase 4's job is to drive the
-escape rate to zero (or to document each remaining escape as a known limitation). Writing
-the matrix first, red, is deliberate: the tests are not shaped to fit an implementation that
-does not yet exist.
+Until Phase 4 builds `convergence run`, the `convergence` launcher reports every case as
+`launcher-unavailable`: nothing is executed, and the run fails. A case that did not run is
+never counted as a pass. That red baseline is committed. Phase 4's job is to make the
+launcher real and drive the escape rate to zero (or document each remaining escape as a
+known limitation). Writing the matrix first, red, is deliberate: the tests are not shaped to
+fit an implementation that does not yet exist.
 
 ### ABI-aware expectations, so limitations are not counted as surprises
 

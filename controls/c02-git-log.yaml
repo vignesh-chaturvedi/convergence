@@ -1,0 +1,16 @@
+id: control-git-log
+category: control
+description: git reads the history of a fixture repository in the project directory.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: ["${SCRATCH}", /dev/null]
+    execute: [/usr/bin/git, {path: "${LOADER}", optional: true}]
+  resources: {wall_clock_seconds: 30}
+  environment:
+    set: {PATH: /usr/bin:/bin, HOME: "${SCRATCH}", GIT_CONFIG_NOSYSTEM: "1", LANG: C.UTF-8}
+payload:
+  argv: [/usr/bin/git, -C, "${REPO}", log, --format=%s]
+oracle: {type: workload-output, fixture: git-repo}

@@ -8,6 +8,28 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Escape-matrix harness (`escape/`), outside the installed package:
+  - a strict case format (`convergence.escapecase/1`) with an ABI-aware expected verdict;
+  - `${VARIABLE}` expansion: strict in policies and argv, lenient in shell payload files;
+  - a `/proc` sampler that tracks a run's processes by pid and start time, including
+    daemons reparented to the runner as a child subreaper;
+  - unconfined and Convergence launchers. The unconfined launcher runs inside a safety
+    envelope of rlimits at four times the policy's; the Convergence launcher reports
+    `launcher-unavailable` until `convergence run` exists, never a silent pass;
+  - fourteen external oracles: planted secrets, forbidden paths, held-open sentinel files,
+    harness-owned network sinks, sentinel processes, executable-mapping detection, resource
+    measurement, and survivors;
+  - scoring with Wilson 95% intervals, JSON and Markdown reports, and a SHA-256 holdout seal
+    with a one-time `--holdout-run` gate and a run log.
+- Ten benign controls (`controls/`): Python, git, a shell pipeline, tar and gzip, sqlite3,
+  json.tool, byte-compilation, an HTTP client and a TCP server on granted ports, and a
+  process-spawning tool. All ten are valid unconfined.
+- `THREAT_MODEL.md` (draft), ADR 0005, and the escape-matrix specification
+  (`escape/README.md`).
+- Committed reports in `escape/results/`: the unconfined validity run (10/10 controls valid)
+  and the initially-red confined baseline.
+- CI `escape` job on `ubuntu-24.04` and `ubuntu-24.04-arm`: holdout seal check, the validity
+  gate (required), and the confined matrix (allowed to fail until Phase 4).
 - Policy format `convergence.policy/1` (YAML or JSON): `filesystem` (read, write, execute
   with `${HOME}`, `${CWD}`, `${SCRATCH}`, and optional paths), `network` (TCP and UDP ports
   per direction, unix sockets), `syscalls` (deny list or allow list on top of a built-in deny

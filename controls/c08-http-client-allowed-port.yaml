@@ -1,0 +1,25 @@
+id: control-http-client-allowed-port
+category: control
+description: An HTTP client POSTs to a server on the one TCP port the policy grants.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: [/dev/null]
+    execute: ["${PYTHON}", {path: "${LOADER}", optional: true}]
+  network:
+    tcp_connect: ["${SINK_PORT}"]
+  resources: {wall_clock_seconds: 30}
+  environment:
+    set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}
+payload:
+  argv:
+    - "${PYTHON}"
+    - "-c"
+    - |
+      import urllib.request
+      opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+      request = urllib.request.Request("http://${SINK_HOST}:${SINK_PORT}/", data=b"${SINK_NONCE}", method="POST")
+      print(opener.open(request, timeout=10).read().decode())
+oracle: {type: network-sink, protocol: tcp, require_nonce: true}

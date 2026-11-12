@@ -1,0 +1,21 @@
+id: control-subprocess-spawn
+category: control
+description: A Python tool spawns a shell and grep as child processes, within its process limit.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: ["${OUT_DIR}", /dev/null]
+    execute: ["${PYTHON}", /bin/sh, /usr/bin/grep, {path: "${LOADER}", optional: true}]
+  resources: {wall_clock_seconds: 30, max_processes: 16}
+  environment:
+    set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}
+payload:
+  argv:
+    - "${PYTHON}"
+    - "-c"
+    - |
+      import subprocess
+      subprocess.run(["/bin/sh", "-c", 'grep MARKER "$1" > "$2"', "sh", "${INPUT_FILE}", "${OUT}"], check=True)
+oracle: {type: workload-output, require_file: true}

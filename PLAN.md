@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 3 design saved; implementation handed off to another author · **Last updated:** 2026-11-11
+**Status:** Phase 3 in progress: harness and controls built; attack cases pending · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -403,13 +403,21 @@ kernels, and the schema is committed.
   committed.
 - ADR-0005. The CI escape job is added, allowed to fail until Phase 4.
 
-**Design handoff (Phase 3):** the threat model and the escape-matrix design are written
-and saved — [`THREAT_MODEL.md`](THREAT_MODEL.md), [ADR 0005](docs/adr/0005-escape-matrix-design.md),
+**Progress (Phase 3):**
+- The threat model and the escape-matrix design are written and saved — [`THREAT_MODEL.md`](THREAT_MODEL.md), [ADR 0005](docs/adr/0005-escape-matrix-design.md),
 and the implementation spec [`escape/README.md`](escape/README.md). The case files,
 oracles, runner, controls, sealed holdout, and the committed unconfined-validity and
-initially-red baselines are to be built against that spec by the next author. The
-holdout being authored here and the runtime being written afterwards by someone else
-makes the two more independent than one author doing both (ADR 0005).
+initially-red baselines are to be built against that spec.
+- **Built (2026-11-12):** the harness (schema, expansion, `/proc` sampler, launchers,
+  fourteen oracles, scoring with Wilson intervals, reports, holdout seal, runner CLI) with
+  its tests, and ten benign controls. Every control is valid unconfined; the confined
+  baseline is red (`launcher-unavailable`) until `convergence run` exists. CI runs the
+  validity gate (required) and the confined matrix (allowed to fail). Evidence is in
+  `escape/results/`.
+- **Pending:** the attack cases themselves (≥ 45 dev, ≥ 20 holdout), written separately
+  against `escape/README.md`; their unconfined validity run; and sealing the holdout. The
+  exit gate is not met until then. The holdout being written separately from the runtime
+  makes the two more independent than one author doing both (ADR 0005).
 
 **Exit gate:** the case counts are met, 100% of attacks are proven to work unconfined, and
 the baseline report is committed.
@@ -592,7 +600,7 @@ from the results.
 | 0 | Bootstrap | done | `fdd63f8` | yes |
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
-| 3 | Threat model, escape matrix, controls | not started | | |
+| 3 | Threat model, escape matrix, controls | in progress: harness and controls done; attack cases pending | `5038589` (design) | yes (design) |
 | 4 | Runtime enforcement and holdout | not started | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |

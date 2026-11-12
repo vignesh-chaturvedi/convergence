@@ -131,3 +131,47 @@ jobs:
           name: doctor-ubuntu-24.04-ga-kernel-nested-x86_64
           path: doctor.json
           if-no-files-found: warn
+
+  # The escape matrix. The validity gate must pass now: every case must do what it claims
+  # with nothing confining it. The confined run needs `convergence run` (Phase 4) and is
+  # expected to fail until then, so it is allowed to fail; its report is still uploaded.
+  escape:
+    name: escape matrix (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - runner: ubuntu-24.04
+            uv-sha256: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+          - runner: ubuntu-24.04-arm
+            uv-sha256: 229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          checksum: ${{ matrix.uv-sha256 }}
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Holdout seal
+        run: uv run --locked python -m escape.runner verify-holdout
+      - name: Validity (unconfined; must pass)
+        run: >
+          uv run --locked python -m escape.runner validity --set dev --set controls
+          --json out/validity.json --markdown out/validity.md
+      - name: Confined matrix (expected to fail until Phase 4)
+        continue-on-error: true
+        run: >
+          uv run --locked python -m escape.runner run --launcher convergence
+          --set dev --set controls --json out/confined.json --markdown out/confined.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: escape-${{ matrix.runner }}
+          path: out/
+          if-no-files-found: warn

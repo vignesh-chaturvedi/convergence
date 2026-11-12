@@ -1,0 +1,210 @@
+{
+  "schema": "convergence.escape-report/1",
+  "environment": {
+    "timestamp": "2026-11-12T01:21:30+00:00",
+    "commit": "5038589685e97a01763ac68046f733069120595b+uncommitted",
+    "kernel": "6.8.0-134-generic",
+    "arch": "aarch64",
+    "os": "Ubuntu 24.04.4 LTS",
+    "landlock_abi": 4,
+    "python": "3.12.3",
+    "convergence_version": "0.1.0.dev0",
+    "launcher": "convergence"
+  },
+  "summary": {
+    "cases": 10,
+    "counts": {
+      "launcher-unavailable": 10
+    },
+    "escape_rate": {
+      "numerator": 0,
+      "denominator": 0,
+      "value": null,
+      "wilson_95": null,
+      "text": "n/a (nothing counted)"
+    },
+    "false_denial_rate": {
+      "numerator": 0,
+      "denominator": 0,
+      "value": null,
+      "wilson_95": null,
+      "text": "n/a (nothing counted)"
+    },
+    "documented_limitations": []
+  },
+  "by_set": {
+    "controls": {
+      "cases": 10,
+      "counts": {
+        "launcher-unavailable": 10
+      },
+      "escape_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null,
+        "wilson_95": null,
+        "text": "n/a (nothing counted)"
+      },
+      "false_denial_rate": {
+        "numerator": 0,
+        "denominator": 0,
+        "value": null,
+        "wilson_95": null,
+        "text": "n/a (nothing counted)"
+      },
+      "documented_limitations": []
+    }
+  },
+  "results": [
+    {
+      "id": "control-python-read-write",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-git-log",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-shell-pipeline",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-tar-gzip",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-python-sqlite",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-json-tool",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-py-compile",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-http-client-allowed-port",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-tcp-server-allowed-port",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    },
+    {
+      "id": "control-subprocess-spawn",
+      "set": "controls",
+      "category": "control",
+      "kind": "control",
+      "mechanism": "none (benign control)",
+      "min_abi": 0,
+      "result": "launcher-unavailable",
+      "evidence": "`convergence run` is not implemented yet (Phase 4 in PLAN.md); nothing was executed",
+      "elapsed": null,
+      "exit_code": null,
+      "signal": null,
+      "timed_out": false,
+      "stderr_tail": ""
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+id: control-python-read-write
+category: control
+description: A Python script reads a file from the project directory and writes a filtered copy.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: ["${OUT_DIR}", /dev/null]
+    execute: ["${PYTHON}", {path: "${LOADER}", optional: true}]
+  resources: {wall_clock_seconds: 30}
+  environment:
+    set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}
+payload:
+  argv:
+    - "${PYTHON}"
+    - "-c"
+    - |
+      import pathlib
+      lines = [l for l in pathlib.Path("${INPUT_FILE}").read_text().splitlines() if "MARKER" in l]
+      pathlib.Path("${OUT}").write_text("\n".join(lines) + "\n")
+oracle: {type: workload-output, require_file: true}

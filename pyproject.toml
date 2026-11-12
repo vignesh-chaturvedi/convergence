@@ -80,11 +80,13 @@ select = [
 python_version = "3.12"
 strict = true
 warn_unreachable = true
-files = ["src", "tests"]
+files = ["src", "tests", "escape"]
 
 [tool.pytest.ini_options]
 minversion = "8.4"
 testpaths = ["tests"]
+# The escape-matrix harness lives at the repository root (it is not part of the package).
+pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 markers = [
     "kernel: needs a real Linux kernel with the feature under test (never mocked)",

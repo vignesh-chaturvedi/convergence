@@ -1,0 +1,16 @@
+id: control-tar-gzip
+category: control
+description: tar and gzip archive the project directory into the output directory.
+expect: {verdict: allowed, mechanism: none (benign control)}
+policy:
+  version: 1
+  filesystem:
+    read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
+    write: ["${OUT_DIR}", /dev/null]
+    execute: [/usr/bin/tar, /usr/bin/gzip, {path: "${LOADER}", optional: true}]
+  resources: {wall_clock_seconds: 30}
+  environment:
+    set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}
+payload:
+  argv: [/usr/bin/tar, -czf, "${OUT_DIR}/work.tar.gz", -C, "${WORKDIR}", "."]
+oracle: {type: workload-output, check: archive}

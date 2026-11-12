@@ -77,11 +77,24 @@ A failure is reported to the parent on a close-on-exec pipe as a step code and e
 **Supervisor:**
 - It is a child subreaper, so every orphan of the sandbox becomes its child.
 - When the tool's first process exits, the run is over. So is the wall-clock deadline or a
-  signal to the supervisor. In each case the supervisor kills the tool's process group, then
-  repeatedly kills and reaps its own children until none are left. Orphans re-parent to it,
-  so this also reaches processes that left the session.
-- Only its own children are signalled, and a child's pid cannot be reused until it is
-  reaped.
+  signal to the supervisor. In each case the supervisor kills the tool's process group and
+  then sweeps every descendant, until none is running.
+- **The sweep (changed after the security review of 0.1.0).** The first version killed and
+  reaped only the supervisor's direct children, round after round. A tool that kept forking
+  into new sessions stayed ahead of it: a 3-second limit ended after 270 seconds, with 41
+  processes left. Now:
+  - the sweep walks the whole process tree and signals parents before their children;
+  - nothing is reaped until everything is dead. A dead process keeps its `RLIMIT_NPROC`
+    slot until it is reaped, so every fork the tool wins uses up a slot for good, and a
+    parent that is already dying cannot free one by reaping;
+  - each process is opened as a `/proc/<pid>` directory, checked to be a child of the
+    process it was listed under, and signalled through that descriptor. A reused pid is
+    never signalled;
+  - the first process is reaped last, so its process-group id cannot be reused meanwhile.
+- The sweep relies on `resources.max_processes`. Without it, it gives up after 10 seconds
+  and the run record says how many processes are left (`outcome.left_running`).
+- Stop signals are blocked across the fork, so neither process handles one before the
+  child's pid is stored.
 
 ## Consequences
 

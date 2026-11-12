@@ -6,6 +6,39 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+A security review of 0.1.0 ([docs/security-review.md](docs/security-review.md)) found the
+weaknesses below. Each was reproduced on stock Ubuntu 24.04, fixed, and given a regression
+test. **0.1.0 is affected by all of them.**
+
+- **TCP port grants could be bypassed with TCP fast open.** Sending with `MSG_FASTOPEN`
+  connects a socket without Landlock's port check. A policy that granted any TCP port let
+  the tool reach every port. seccomp now denies that flag unless `tcp_connect` is `any`.
+- **A tool that kept forking outlived the wall-clock limit and the clean-up.** With a
+  3-second limit, the run ended after 270 seconds and left 41 processes running. The
+  supervisor now sweeps the whole process tree, parents first, and reaps nothing until all
+  are dead. If it cannot finish, the record's new `outcome.left_running` says so.
+- **A grant inside a directory granted for writing could be redirected.** A tool could
+  replace it with a symbolic link, and the next run granted the link's target. `run` now
+  refuses such a path unless it ends inside a directory granted for writing.
+- **MCP clients chose where `${CWD}` pointed.** `run_sandboxed` accepted any `cwd`. It must
+  now be the server's directory or one beneath it, unless `--allow-any-cwd` is passed.
+- **`prlimit64` reached other processes.** A tool could change the resource limits of any
+  process of the same user, and get it killed with a CPU limit. It is now denied for every
+  process but the caller.
+- **A socket could listen without a bind grant**, on a port the kernel picked. `listen` is
+  now denied unless the policy grants a TCP port to bind or unix sockets can be created.
+- **The `personality` rule could be bypassed** by also setting bit 31.
+
+### Changed
+
+- `convergence explain` reports `baseline.scheduling`, and says that below Landlock ABI 6
+  the tool can signal the supervisor.
+- Stop signals are blocked across the supervisor's forks.
+- MCP policy names and run ids must match exactly; a trailing newline is no longer accepted.
+- THREAT_MODEL.md describes the software as built, and lists what the review could not fix.
+
 ## [0.1.0] - 2026-11-12
 
 The first release.

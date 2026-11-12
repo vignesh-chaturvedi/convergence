@@ -13,8 +13,10 @@ Divergence reports the gap between what an MCP server declares and what it does;
 Convergence contains what it does.
 
 > **Status: 0.1.0, the first release.** Every claim below comes from tests and measurements
-> in this repository, on real kernels. Nothing here has been independently audited. Do not
-> make it your only protection for code you do not trust.
+> in this repository, on real kernels. A [security review](docs/security-review.md) after
+> the release found seven weaknesses in 0.1.0; they are fixed on `main`. Nothing here has
+> been independently audited. Do not make it your only protection for code you do not
+> trust.
 
 ## Quickstart
 
@@ -56,7 +58,7 @@ convergence explain --run <run id>                        # why something was de
 | Mechanism | What it does |
 |---|---|
 | **Landlock** | Files: read, write, and execute only where granted. TCP ports from ABI 4, UDP from ABI 10, signals and abstract unix sockets scoped to the sandbox from ABI 6 |
-| **seccomp-bpf** | Denies escape- and tamper-prone syscalls: `ptrace`, `process_vm_*`, `mount`, `unshare`, namespace flags on `clone`, `io_uring`, `bpf`, `perf_event_open`, `userfaultfd`, keyrings, `TIOCSTI`, and more. Allows only the socket families, types, and protocols the policy grants. Not user notification, which is never used as a boundary |
+| **seccomp-bpf** | Denies escape- and tamper-prone syscalls: `ptrace`, `process_vm_*`, `mount`, `unshare`, namespace flags on `clone`, `io_uring`, `bpf`, `perf_event_open`, `userfaultfd`, keyrings, `TIOCSTI`, and more. Allows only the socket families, types, and protocols the policy grants. Denies TCP fast open, which would pass Landlock's port rules, and `prlimit64` on other processes. Not user notification, which is never used as a boundary |
 | **`no_new_privs`** | setuid and file-capability binaries gain nothing |
 | **rlimits** | CPU, memory, file size, open files, processes; core dumps off |
 | **The supervisor** | Builds the environment from the policy alone and closes inherited descriptors. When the tool's first process exits, or at the wall clock, it kills everything the tool started, including daemons that left the session |
@@ -71,14 +73,21 @@ These are documented, measured where possible, and not hidden:
 
 - **Hosts.** Landlock filters by port, not host: `tcp_connect: [443]` allows HTTPS to every
   host.
-- **Code the tool can read.** Execute grants limit which programs the kernel starts. They
-  do not stop the dynamic loader running a file the tool can only read. This is the one
-  escape the matrix found, in development and in the holdout; whatever runs that way stays
-  inside the sandbox.
+- **Code the tool can read.** Execute grants limit which files the kernel starts. They do
+  not stop the dynamic loader running a file the tool can only read, or the tool running
+  code it has put in memory. This is the one escape the matrix found, in development and in
+  the holdout; whatever runs that way stays inside the sandbox.
 - **Older kernels.** Below Landlock ABI 6, the tool can signal other processes of the same
-  user. Below ABI 9, unix sockets cannot be limited to the sandbox, so they are denied
-  altogether.
-- **File metadata.** `stat`, `chmod`, `chown`, and `utime` are outside Landlock's control.
+  user. That includes Convergence's own supervisor: stopping it defeats the time limit and
+  the clean-up. Below ABI 9, unix sockets cannot be limited to the sandbox, so they are
+  denied altogether.
+- **Listening.** `tcp_bind` limits explicit binds. Where `listen` has to stay allowed, the
+  tool can accept TCP connections on a port the kernel picks.
+- **File metadata and scheduling.** `stat`, `chmod`, `chown`, and `utime` are outside
+  Landlock's control. The tool can also change the priority and CPU affinity of your other
+  processes.
+- **A tool that keeps forking, without a process limit.** The final clean-up is only
+  certain while `resources.max_processes` is set (the default).
 - **A supervisor killed with `SIGKILL`.** The tool dies with it, but processes it started
   can outlive it.
 - **Kernel exploits, side channels, and misuse of what the policy grants.**
@@ -100,6 +109,12 @@ first proven to escape with no sandbox.
 | **26 holdout attacks**, sealed, written independently, run once | stock Ubuntu 24.04, 6.8 | **1/22 (4.5%; 0.8–21.8%)** | 1 needs ABI 6; 3 proved nothing either way |
 
 Every escape is the dynamic-loader limitation above.
+
+**What the matrix missed.** A [security review](docs/security-review.md) after 0.1.0 found
+seven weaknesses that no matrix case covered. The most serious let a tool reach TCP ports
+the policy did not grant, and outlive the wall-clock limit by forking. All seven are fixed
+on `main` and have regression tests. None has a matrix case yet, so the rates above do not
+count them.
 
 **False denials**, on 10 benign workloads: git, tar, sqlite, an HTTP client and server,
 shell pipelines, and more.

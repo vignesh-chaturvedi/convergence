@@ -174,6 +174,12 @@ def _run(args: argparse.Namespace) -> int:
         _say(f"stopped the tool at the wall-clock limit ({record.duration_seconds:.1f} s)")
     if outcome.descendants_killed:
         _say(f"killed {outcome.descendants_killed} process(es) the tool left running")
+    if outcome.left_running:
+        _say(
+            f"WARNING: {outcome.left_running} process(es) of the tool could not be killed and "
+            "are STILL RUNNING, inside the sandbox (the tool kept forking; see "
+            "resources.max_processes)"
+        )
     _report_denials(record)
     if not args.no_record:
         try:
@@ -298,6 +304,7 @@ def _mcp(args: argparse.Namespace) -> int:
         policies=Path(args.policies).resolve() if args.policies else None,
         allow_inline_policy=args.allow_inline_policy,
         allow_observe=args.allow_observe,
+        allow_any_cwd=args.allow_any_cwd,
     )
     return main(config)
 
@@ -542,6 +549,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-observe",
         action="store_true",
         help="add the observe tool, which runs commands UNCONFINED",
+    )
+    mcp.add_argument(
+        "--allow-any-cwd",
+        action="store_true",
+        help=(
+            "let clients run commands in any directory; by default only the directory the "
+            "server was started in and those beneath it (${CWD} in a policy follows cwd)"
+        ),
     )
     mcp.set_defaults(handler=_mcp)
     return parser

@@ -36,6 +36,7 @@ class Outcome:
     exit_code: int | None = None  # the tool's, when it exited normally
     signal: str | None = None  # the signal that ended the tool's first process
     descendants_killed: int = 0  # processes still running when the run ended
+    left_running: int = 0  # processes the supervisor could not kill; 0 on a clean end
     error: str | None = None  # why the tool was not started
 
 

@@ -104,7 +104,13 @@ def observe(
     timed_out = False
     stopped_by: int | None = None
     try:
-        pid = os.fork()
+        # See supervise(): no handler may run between the fork and the child's own setup.
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+        try:
+            pid = os.fork()
+        finally:
+            if pid != 0:
+                signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
         if pid == 0:
             try:
                 os.setsid()
@@ -132,7 +138,7 @@ def observe(
         for sig in STOP_SIGNALS:
             signal.signal(sig, lambda _signum, _frame: None)
         if pid > 0:
-            kill_everything(pid)
+            status = kill_everything(pid).statuses.get(pid, status)
             if status is None:
                 with contextlib.suppress(ChildProcessError):
                     _, status = os.waitpid(pid, 0)

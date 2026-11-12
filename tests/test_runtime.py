@@ -6,10 +6,14 @@ small Python scripts run by the system interpreter, which the policies grant.
 
 from __future__ import annotations
 
+import contextlib
+import errno
 import json
 import os
+import resource
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -26,12 +30,14 @@ from convergence.runtime.filters import (
     AF_INET,
     AF_INET6,
     AF_UNIX,
+    MSG_FASTOPEN,
     SOCK_DGRAM,
     SOCK_STREAM,
     FilterError,
     SocketGrants,
     build_programs,
 )
+from convergence.runtime.plan import GrantRedirected, open_grant, writable_directories
 from convergence.runtime.tracer import find_strace
 from escape.oracles.execution import find_loader
 
@@ -176,6 +182,84 @@ def test_writes_only_where_granted(area: dict[str, Path]) -> None:
     assert not (area["work"] / "b.txt").exists()
 
 
+def test_a_grant_inside_a_writable_directory_cannot_be_redirected(
+    area: dict[str, Path],
+) -> None:
+    secret = area["outside"] / "secret.txt"
+    secret.write_text("outside every grant")
+    tools = area["out"] / "tools"  # granted for reading, inside a directory granted for writing
+    tools.mkdir()
+    pol = policy(area)
+    pol["filesystem"]["read"].append(str(tools))
+    code = f"print(open({str(secret)!r}).read())"
+    assert run(area, py(code), pol).returncode != 0  # the grant itself does not reach it
+
+    # What an earlier run under this policy could have left behind.
+    tools.rmdir()
+    tools.symlink_to(area["outside"])
+    result = run(area, py(code), pol)
+    assert result.returncode == 125, result.stdout
+    assert "symbolic link" in result.stderr
+    assert "outside every grant" not in result.stdout
+
+    # A link that stays inside the writable directory changes nothing, so it is followed.
+    tools.unlink()
+    (area["out"] / "real").mkdir()
+    tools.symlink_to(area["out"] / "real")
+    assert run(area, py("print('ran')"), pol).stdout.strip() == "ran"
+
+
+def test_a_grant_through_a_writable_directory_must_end_in_one(tmp_path: Path) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    for directory in (root / "sub", outside / "deep"):
+        directory.mkdir(parents=True)
+    (root / "escape").symlink_to(outside)
+    (root / "dotdot").symlink_to("../outside")
+    (root / "inside").symlink_to("sub")
+    (root / "inside-absolute").symlink_to(root / "sub")
+    (root / "out-and-back").symlink_to(outside / "back")
+    (outside / "back").symlink_to(root / "sub")
+    (tmp_path / "into-root").symlink_to(root / "escape" / "deep")  # a trusted link into the root
+    every, trusted = writable_directories([str(root)])
+    assert every == trusted == [str(root)]
+
+    def opened(path: Path, writable: list[str] = every, safe: list[str] = trusted) -> str:
+        fd = open_grant(str(path), writable, safe)
+        try:
+            return os.readlink(f"/proc/self/fd/{fd}")
+        finally:
+            os.close(fd)
+
+    assert opened(root) == str(root)
+    for inside in ("sub", "inside", "inside-absolute", "out-and-back"):
+        assert opened(root / inside) == str(root / "sub"), inside
+    for redirected in (
+        root / "escape",
+        root / "escape" / "deep",
+        root / "dotdot",
+        tmp_path / "into-root",
+    ):
+        with pytest.raises(GrantRedirected):
+            opened(redirected)
+    # Outside any writable directory, links are followed as before.
+    assert opened(root / "escape" / "deep", [], []) == str(outside / "deep")
+    assert opened(tmp_path / "into-root", [], []) == str(outside / "deep")
+    with pytest.raises(FileNotFoundError):
+        opened(root / "missing")
+
+
+def test_a_redirected_write_grant_is_not_trusted(tmp_path: Path) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (root / "build").symlink_to(outside)  # a second write grant, pointed elsewhere by the tool
+    every, trusted = writable_directories([str(root), str(root / "build")])
+    assert every == sorted([str(root), str(outside)])
+    assert trusted == [str(root)]
+    with pytest.raises(GrantRedirected):
+        open_grant(str(root / "build"), every, trusted)
+
+
 def test_scratch_is_fresh_writable_and_removed(area: dict[str, Path]) -> None:
     code = (
         "import os, sys; d = sys.argv[1]; print(d, os.listdir(d)); open(d + '/f', 'w').write('x')"
@@ -264,6 +348,88 @@ def test_the_wall_clock_kills_everything(area: dict[str, Path]) -> None:
     assert wait_gone(int(pidfile.read_text()))
 
 
+STORM = """
+import os, sys
+marker = sys.argv[1]
+while True:
+    try:
+        if os.fork() == 0:
+            os.setsid()  # leave the process group: only a per-process kill reaches it now
+    except OSError:
+        pass
+"""
+
+
+def _running_with(marker: str) -> list[int]:
+    found = []
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = Path(entry.path, "cmdline").read_bytes()
+        except OSError:
+            continue
+        if marker.encode() in command and alive(int(entry.name)):
+            found.append(int(entry.name))
+    return found
+
+
+def test_a_fork_storm_that_leaves_the_group_is_killed(area: dict[str, Path]) -> None:
+    marker = f"storm-{os.getpid()}-{time.monotonic_ns()}"
+    pol = policy(area, resources={"wall_clock_seconds": 2, "max_processes": 12})
+    started = time.monotonic()
+    result = run(area, [*py(STORM), marker], pol, extra=("--no-record", "--json"))
+    took = time.monotonic() - started
+    outcome = json.loads(result.stdout)["outcome"]
+    try:
+        assert result.returncode == 124, result.stderr
+        assert took < 15, took
+        assert outcome["left_running"] == 0
+        assert outcome["descendants_killed"] >= 1
+        assert _running_with(marker) == []
+    finally:
+        for pid in _running_with(marker):
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+
+
+GIVE_UP = """
+import json, os, sys, time
+from convergence.kernel._libc import PR_SET_CHILD_SUBREAPER, prctl
+from convergence.runtime.supervisor import kill_everything
+prctl(PR_SET_CHILD_SUBREAPER, 1)
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    if os.fork() == 0:
+        os.setsid()
+    time.sleep(60)
+    os._exit(0)
+time.sleep(0.3)
+impatient = kill_everything(pid, patience=0.0)
+thorough = kill_everything(pid)
+print(json.dumps({
+    "impatient_left_running": impatient.left_running,
+    "killed": len(impatient.killed),
+    "thorough_left_running": thorough.left_running,
+    "reaped": len(impatient.statuses) + len(thorough.statuses),
+}))
+"""
+
+
+def test_the_sweep_says_what_it_could_not_kill() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", GIVE_UP], capture_output=True, text=True, timeout=60, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "impatient_left_running": 2,  # out of patience after one sweep: both are reported
+        "killed": 2,
+        "thorough_left_running": 0,
+        "reaped": 2,
+    }
+
+
 def _start_and_wait_for_pid(area: dict[str, Path], pidfile: Path) -> subprocess.Popen[bytes]:
     policy_path = area["work"].parent / "policy.json"
     policy_path.write_text(json.dumps(policy(area)))
@@ -347,7 +513,7 @@ def test_the_process_limit_applies_to_the_tool(area: dict[str, Path]) -> None:
 
 
 SYSCALLS = """
-import ctypes, errno, json, socket, sys
+import ctypes, errno, json, os, socket, sys
 nums = json.loads(sys.argv[1])
 libc = ctypes.CDLL(None, use_errno=True)
 libc.syscall.restype = ctypes.c_long
@@ -360,12 +526,27 @@ def sock(*args):
         return 'ok'
     except OSError as e:
         return errno.errorcode[e.errno]
+def on_tcp(action):
+    try:
+        action(socket.socket())
+        return 'ok'
+    except OSError as e:
+        return errno.errorcode[e.errno]
+FASTOPEN, CLOSED = 0x20000000, ('127.0.0.1', 9)
 out = {
     'unshare_user': call('unshare', 0x10000000),
     'clone3': call('clone3', 0, 0),
     'io_uring_setup': call('io_uring_setup', 1, 0),
     'personality_query': call('personality', 0xFFFFFFFF),
     'personality_no_aslr': call('personality', 0x0040000),
+    'personality_no_aslr_bit_31': call('personality', 0x80040000),
+    'personality_bit_31': call('personality', 0x80000000),
+    'prlimit_self': call('prlimit64', 0, 7, 0, 0),
+    'prlimit_supervisor': call('prlimit64', os.getppid(), 7, 0, 0),
+    'listen_unbound': on_tcp(lambda s: s.listen(1)),
+    'fastopen_sendto': on_tcp(lambda s: s.sendto(b'x', FASTOPEN, CLOSED)),
+    'fastopen_sendmsg': on_tcp(lambda s: s.sendmsg([b'x'], [], FASTOPEN, CLOSED)),
+    'fastopen_sendmmsg': call('sendmmsg', -1, 0, 0, FASTOPEN),
     'netlink': sock(socket.AF_NETLINK, socket.SOCK_RAW, 0),
     'tcp': sock(socket.AF_INET, socket.SOCK_STREAM),
     'tcp_sctp': sock(socket.AF_INET, socket.SOCK_STREAM, 132),
@@ -380,6 +561,7 @@ print(json.dumps(out))
 def test_the_baseline_syscall_filter(area: dict[str, Path]) -> None:
     lib = sc.library()
     names = ["unshare", "clone3", "io_uring_setup", "personality", "socket"]
+    names += ["prlimit64", "sendmmsg"]
     nums = json.dumps({n: lib.resolve_syscall(n) for n in names})
     pol = policy(area, network={"tcp_connect": [9]})
     result = run(area, [*py(SYSCALLS), nums], pol)
@@ -391,6 +573,15 @@ def test_the_baseline_syscall_filter(area: dict[str, Path]) -> None:
         "io_uring_setup": "EPERM",
         "personality_query": "ok",
         "personality_no_aslr": "EPERM",
+        "personality_no_aslr_bit_31": "EPERM",
+        "personality_bit_31": "EPERM",
+        "prlimit_self": "ok",
+        "prlimit_supervisor": "EPERM",
+        # A unix server needs listen(), so it stays allowed where unix sockets can be made.
+        "listen_unbound": unix_expected,
+        "fastopen_sendto": "EPERM",
+        "fastopen_sendmsg": "EPERM",
+        "fastopen_sendmmsg": "EPERM",
         "netlink": "EPERM",
         "tcp": "ok",
         "tcp_sctp": "EPERM",
@@ -452,6 +643,63 @@ def test_socket_grants_follow_the_policy() -> None:
     grants = SocketGrants.from_policy(udp, 4)
     assert grants.families == {AF_UNIX, AF_INET, AF_INET6}
     assert grants.inet_types == {SOCK_DGRAM}
+
+
+def test_fast_open_and_listen_follow_the_network_policy() -> None:
+    lib = sc.library()
+
+    def size(text: str, abi: int = 4) -> int:
+        return len(build_programs(parse_policy(text), abi, lib).baseline)
+
+    restricted = size("version: 1\nnetwork: {tcp_connect: [443]}\n")
+    # 'any' has no port rule to get around, so sending with MSG_FASTOPEN stays allowed.
+    assert size("version: 1\nnetwork: {tcp_connect: any}\n") < restricted
+    # A granted bind port, or creatable unix sockets, need listen().
+    assert size("version: 1\nnetwork: {tcp_connect: [443], tcp_bind: [8080]}\n") < restricted
+    assert MSG_FASTOPEN == 0x20000000  # include/linux/socket.h
+
+
+def test_tcp_fast_open_cannot_reach_a_port_that_is_not_granted(area: dict[str, Path]) -> None:
+    code = (
+        "import socket, sys\n"
+        "s = socket.socket()\n"
+        "try:\n"
+        "    s.sendto(b'leak', 0x20000000, ('127.0.0.1', int(sys.argv[1])))\n"
+        "    print('sent')\n"
+        "except OSError as e:\n"
+        "    print(e.errno)\n"
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        listener.settimeout(1.5)
+        port = listener.getsockname()[1]
+        granted = port - 1 if port > 1024 else port + 1
+        pol = policy(area, network={"tcp_connect": [granted]})
+        result = run(area, [*py(code), str(port)], pol)
+        with pytest.raises(TimeoutError):
+            listener.accept()
+    assert result.stdout.strip() == str(errno.EPERM), result.stderr
+
+
+def test_the_tool_cannot_change_another_processs_limits(area: dict[str, Path]) -> None:
+    victim = subprocess.Popen(["/usr/bin/sleep", "30"])
+    try:
+        before = resource.prlimit(victim.pid, resource.RLIMIT_CPU)
+        code = (
+            "import resource, sys\n"
+            "try:\n"
+            "    resource.prlimit(int(sys.argv[1]), resource.RLIMIT_CPU, (1, 1))\n"
+            "    print('changed')\n"
+            "except OSError as e:\n"
+            "    print(e.errno)\n"
+        )
+        result = run(area, [*py(code), str(victim.pid)])
+        assert result.stdout.strip() == str(errno.EPERM), result.stderr
+        assert resource.prlimit(victim.pid, resource.RLIMIT_CPU) == before
+    finally:
+        victim.kill()
+        victim.wait()
 
 
 def test_programs_follow_the_mode() -> None:

@@ -135,7 +135,25 @@ ARGUMENT_RULES: tuple[ArgumentRule, ...] = (
     ArgumentRule(
         "personality",
         "denied when it sets ADDR_NO_RANDOMIZE, READ_IMPLIES_EXEC, MMAP_PAGE_ZERO, or "
-        "ADDR_COMPAT_LAYOUT (no disabling of address space randomisation); queries work",
+        "ADDR_COMPAT_LAYOUT (no disabling of address space randomisation), or any value "
+        "with bit 31 set; queries work",
+    ),
+    ArgumentRule(
+        "prlimit64",
+        "denied for any process but the caller (pid 0), so the tool cannot change the "
+        "resource limits of other processes of the same user",
+    ),
+    ArgumentRule(
+        "sendto",
+        "denied with MSG_FASTOPEN unless tcp_connect is 'any': it would connect a TCP "
+        "socket without Landlock's port check",
+    ),
+    ArgumentRule("sendmsg", "denied with MSG_FASTOPEN, as for sendto"),
+    ArgumentRule("sendmmsg", "denied with MSG_FASTOPEN, as for sendto"),
+    ArgumentRule(
+        "listen",
+        "denied unless the policy grants a TCP port to bind or unix sockets can be "
+        "created: listening without bind would take a port Landlock never checks",
     ),
     ArgumentRule(
         "socket",

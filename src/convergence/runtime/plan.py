@@ -8,17 +8,22 @@ it is given.
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
+import errno
 import os
 import re
 import resource
 import shutil
 import stat
+import struct
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from convergence.kernel import landlock as ll
 from convergence.kernel import seccomp as sc
+from convergence.kernel._libc import syscall
 from convergence.kernel.landlock import AccessFs, AccessNet, Scope
 from convergence.policy.baseline import ARGUMENT_RULES, denied_names
 from convergence.policy.enforce import Assessment, Capabilities, RuleAssessment, assess
@@ -37,6 +42,13 @@ EXIT_CANNOT_EXECUTE = 126  # the tool exists but could not be executed (often: n
 EXIT_NOT_FOUND = 127
 
 _VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+# openat2(2): the same number on x86_64 and arm64; flags from include/uapi/linux/openat2.h.
+SYS_OPENAT2 = 437
+RESOLVE_NO_MAGICLINKS = 0x02
+RESOLVE_NO_SYMLINKS = 0x04
+RESOLVE_BENEATH = 0x08
+MAX_SYMLINKS = 40  # the kernel's own limit for one path walk
 
 
 class RunError(Exception):
@@ -61,6 +73,10 @@ class LandlockPlan:
     port_rules: int = 0
     # /proc/self paths only the sandboxed process can resolve: (bucket, path, optional).
     proc_self: list[tuple[Bucket, str, bool]] = field(default_factory=list)
+    # Real paths of the directories granted for writing: all, and the trusted ones (see
+    # open_grant).
+    writable: list[str] = field(default_factory=list)
+    writable_trusted: list[str] = field(default_factory=list)
 
     def summary(self) -> dict[str, object]:
         return {
@@ -103,7 +119,8 @@ def _remove_tree(root: Path) -> None:
 
     def fix(func: object, path: str, _exc: object) -> None:
         try:
-            os.chmod(path, stat.S_IRWXU)
+            if not os.path.islink(path):  # chmod would follow a link out of the tree
+                os.chmod(path, stat.S_IRWXU)
             parent = os.path.dirname(path)
             os.chmod(parent, stat.S_IRWXU)
             if os.path.isdir(path) and not os.path.islink(path):
@@ -180,6 +197,13 @@ def build_landlock(
         scope |= features.scope & Scope.ABSTRACT_UNIX_SOCKET
     ruleset = ll.Ruleset(handled_fs, handled_net, scope)
     plan = LandlockPlan(abi, ruleset, handled_fs, handled_net, scope)
+    plan.writable, plan.writable_trusted = writable_directories(
+        [
+            item.expanded
+            for item in paths
+            if item.bucket == "write" and item.kind is PathKind.DIRECTORY and item.expanded
+        ]
+    )
     try:
         for item in paths:
             if item.kind is PathKind.PROC_SELF:
@@ -211,9 +235,130 @@ def build_landlock(
     return plan
 
 
+class GrantRedirected(Exception):
+    """A granted path leaves the directories the tool may write to, through a symbolic link."""
+
+    def __init__(self, root: str) -> None:
+        super().__init__(root)
+        self.root = root
+
+
+def _open_beneath(root: str, relative: str) -> int:
+    """Open ``relative`` under ``root`` (O_PATH), with no symbolic link on the way.
+
+    The path given here has already been resolved, so a link can only appear if something
+    is changing the directory at this moment. The kernel then refuses the open.
+    """
+    resolve = RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS | RESOLVE_NO_MAGICLINKS
+    how = struct.pack("=QQQ", os.O_PATH | os.O_CLOEXEC, 0, resolve)
+    buffer = ctypes.create_string_buffer(how, len(how))
+    root_fd = os.open(root, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        return syscall(
+            SYS_OPENAT2,
+            ctypes.c_int(root_fd),
+            ctypes.c_char_p(os.fsencode(relative)),
+            buffer,
+            ctypes.c_size_t(len(how)),
+        )
+    except OSError as exc:
+        if exc.errno in (errno.EXDEV, errno.ELOOP):
+            raise GrantRedirected(root) from exc
+        raise
+    finally:
+        os.close(root_fd)
+
+
+def _writable_root(path: str, roots: list[str]) -> str | None:
+    """The outermost of ``roots`` that ``path`` is, or is inside."""
+    inside = [r for r in roots if path == r or path.startswith(r.rstrip("/") + "/")]
+    return min(inside, key=len) if inside else None
+
+
+def resolve_grant(path: str, writable: list[str]) -> tuple[str, str | None]:
+    """Resolve the symbolic links of ``path`` one step at a time.
+
+    Returns the real path, and the first directory of ``writable`` inside which a part of
+    the path was looked up (None if there was none). What is found there is whatever the
+    tool last put there.
+    """
+    current = "/"
+    pending = [part for part in path.split("/") if part and part != "."]
+    links = 0
+    through: str | None = None
+    while pending:
+        if through is None and writable:
+            through = _writable_root(current, writable)
+        part = pending.pop(0)
+        if part == "..":  # only from a link's target: policy paths cannot contain it
+            current = os.path.dirname(current)
+            continue
+        candidate = os.path.join(current, part)
+        try:
+            target = os.readlink(candidate)
+        except OSError as exc:
+            if exc.errno != errno.EINVAL:  # EINVAL: it exists and is not a link
+                raise
+            current = candidate
+            continue
+        links += 1
+        if links > MAX_SYMLINKS:
+            raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), path)
+        if target.startswith("/"):
+            current = "/"
+        pending = [p for p in target.split("/") if p and p != "."] + pending
+    return current, through
+
+
+def writable_directories(paths: list[str]) -> tuple[list[str], list[str]]:
+    """``(every, trusted)`` real paths of the directories a policy grants for writing.
+
+    ``paths`` are those grants as written. A grant that itself lies inside another
+    writable directory is not trusted: the tool may have pointed it somewhere else.
+    """
+    every: set[str] = set()
+    for path in paths:
+        with contextlib.suppress(OSError):
+            every.add(os.path.realpath(path, strict=True))
+    trusted: set[str] = set()
+    for path in paths:
+        with contextlib.suppress(OSError):
+            real, through = resolve_grant(path, sorted(every))
+            if through is None:
+                trusted.add(real)
+    return sorted(every), sorted(trusted)
+
+
+def open_grant(path: str, writable: list[str], trusted: list[str]) -> int:
+    """Open a granted path for a Landlock rule (O_PATH), following symbolic links.
+
+    Landlock attaches the rule to whatever the path points at when the run starts. Inside
+    a directory the policy lets the tool write to, the tool decides what that is: an
+    earlier run can replace a granted entry with a link to anything, and the next run
+    would grant it. So a path that passes through such a directory (``writable``) must end
+    inside one (``trusted``), where the tool can write already and gains nothing.
+    :class:`GrantRedirected` is raised otherwise.
+    """
+    real, through = resolve_grant(path, writable) if writable else (path, None)
+    if through is None:
+        # Nothing the tool can write to lies on the way: open it as the kernel sees it.
+        return os.open(path, os.O_PATH | os.O_CLOEXEC)
+    root = _writable_root(real, trusted)
+    if root is None:
+        raise GrantRedirected(through)
+    return _open_beneath(root, os.path.relpath(real, root))
+
+
 def _allow_path(plan: LandlockPlan, item: ResolvedPath, target: str) -> None:
     try:
-        fd = os.open(target, os.O_PATH | os.O_CLOEXEC)
+        fd = open_grant(target, plan.writable, plan.writable_trusted)
+    except GrantRedirected as exc:
+        raise RunError(
+            f"{item.location} ({target}): this path leaves the directories granted for "
+            f"writing through a symbolic link inside {exc.root}. The tool may write there, "
+            "so it can change that link and point this grant at anything. Grant the link's "
+            "real target instead."
+        ) from exc
     except OSError as exc:
         if item.rule.optional and isinstance(exc, FileNotFoundError):
             return

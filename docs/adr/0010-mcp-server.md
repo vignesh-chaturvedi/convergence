@@ -43,7 +43,10 @@ default allow.
 
 How the arguments are treated:
 - `command` is an argv list and never goes through a shell.
-- `cwd` must be an existing absolute directory.
+- `cwd` must be an existing absolute directory. `${CWD}` in a policy follows it, so it must
+  also be the server's own directory or one beneath it, after resolving symbolic links.
+  `--allow-any-cwd` lifts that. (Until the security review of 0.1.0 any directory was
+  accepted, which let a client move the operator's `${CWD}` grants anywhere.)
 - `observation` is JSON text or the id of a saved observation, never a path. So is
   `run_id`. This keeps the server from reading arbitrary files for a client.
 - `run_sandboxed` refuses a policy this kernel cannot fully enforce. There is no

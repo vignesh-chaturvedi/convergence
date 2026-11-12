@@ -46,8 +46,12 @@ DENIED_IOCTLS: dict[str, int] = {"TIOCSTI": 0x5412, "TIOCLINUX": 0x541C}
 SECCOMP_SET_MODE_FILTER = 1
 SECCOMP_FILTER_FLAG_NEW_LISTENER = 1 << 3
 
-# include/uapi/linux/personality.h. Bit 31 is never a personality flag; it is set in the
-# query value 0xffffffff, so "flag set and bit 31 clear" never matches a query.
+# include/uapi/linux/personality.h. Bit 31 is never a personality flag. The kernel treats
+# only the exact value 0xffffffff as a query and stores every other value as given, so two
+# sets of rules are needed:
+# - "flag set and bit 31 clear" denies the flag without matching the query;
+# - "bit 31 set and some lower bit clear" denies every other value with bit 31 set, which
+#   would otherwise carry a denied flag past the first set.
 PERSONALITY_QUERY_BIT = 0x80000000
 DENIED_PERSONALITY_FLAGS: dict[str, int] = {
     "ADDR_NO_RANDOMIZE": 0x0040000,
@@ -55,6 +59,12 @@ DENIED_PERSONALITY_FLAGS: dict[str, int] = {
     "ADDR_COMPAT_LAYOUT": 0x0200000,
     "READ_IMPLIES_EXEC": 0x0400000,
 }
+
+# include/linux/socket.h. On a TCP socket, sending with this flag connects it without
+# connect(2), and without Landlock's connect check.
+MSG_FASTOPEN = 0x20000000
+# The flags argument of each call that takes send flags.
+SEND_FLAGS_ARGUMENT: dict[str, int] = {"sendto": 3, "sendmsg": 2, "sendmmsg": 3}
 
 AF_UNIX, AF_INET, AF_INET6 = 1, 2, 10
 HIGHEST_KNOWN_FAMILY = AF_INET6  # every family above this is denied
@@ -94,6 +104,15 @@ class SocketGrants:
         if types:
             families |= {AF_INET, AF_INET6}
         return cls(frozenset(families), frozenset(types))
+
+    def may_listen(self, policy: Policy) -> bool:
+        """Whether anything the policy grants needs ``listen()``.
+
+        A TCP socket that listens without ``bind()`` gets a port from the kernel, and
+        Landlock's bind check never runs. So ``listen()`` is denied unless the policy grants
+        a TCP port to bind, or unix sockets can be created (a unix server needs it too).
+        """
+        return bool(policy.network.tcp_bind) or AF_UNIX in self.families
 
 
 @dataclass(slots=True)
@@ -220,6 +239,29 @@ def _baseline(library: sc.Library, policy: Policy, grants: SocketGrants) -> tupl
                 "personality",
                 _cmp(0, Compare.MASKED_EQ, PERSONALITY_QUERY_BIT | flag, flag),
             )
+        for bit in range(31):
+            builder.rule(
+                eperm,
+                "personality",
+                _cmp(
+                    0,
+                    Compare.MASKED_EQ,
+                    PERSONALITY_QUERY_BIT | (1 << bit),
+                    PERSONALITY_QUERY_BIT,
+                ),
+            )
+    if "prlimit64" not in denied_whole:
+        # Pid 0 is the caller. Any other pid may be another process of the same user, whose
+        # limits the kernel lets the tool change: RLIMIT_CPU alone gets that process killed.
+        builder.rule(eperm, "prlimit64", _cmp(0, Compare.NE, 0))
+    if policy.network.tcp_connect != "any":
+        for name, argument in SEND_FLAGS_ARGUMENT.items():
+            if name not in denied_whole:
+                builder.rule(
+                    eperm, name, _cmp(argument, Compare.MASKED_EQ, MSG_FASTOPEN, MSG_FASTOPEN)
+                )
+    if "listen" not in denied_whole and not grants.may_listen(policy):
+        builder.rule(eperm, "listen")
     if "socket" not in denied_whole:
         _deny_socket_complement(builder, grants)
     return builder.compile(), builder.skipped

@@ -76,6 +76,11 @@ are never granted. `RESOLVE_UNIX` (connecting to pathname unix sockets) is contr
   nothing: the kernel checks the file's position in the real hierarchy.
 - `/proc/self` (and `/proc/thread-self`) are resolved inside the sandboxed process when it
   starts. They cover that process only, not processes it starts later.
+- **A grant inside a directory granted for writing must end inside one.** The tool can
+  replace such a path with a symbolic link, and the next run would then grant whatever the
+  link points at. So `run` follows a link there only if the path still ends inside a
+  directory granted for writing, where the tool gains nothing. Otherwise it refuses to
+  start and names the path. Grant the link's real target instead.
 
 **What a policy cannot express.** Landlock is allow-only, so you cannot grant a directory
 and then exclude a subdirectory such as `~/.ssh`. Grant narrower paths instead. `validate`
@@ -105,6 +110,13 @@ warns when a grant contains your home directory or a known credential location.
   `socketpair()` keeps working.
 - `unix_sockets: allow` lets the tool reach host services such as a container runtime socket
   (root-equivalent) or the session bus. `validate` warns about it.
+- **`tcp_bind` limits explicit binds only.** A TCP socket that listens without binding gets
+  a port from the kernel, and Landlock does not check it. Convergence denies `listen`
+  unless the policy grants a TCP port to bind or unix sockets can be created (a unix
+  server needs it). Where `listen` stays allowed, the tool can also accept TCP connections
+  on a port the kernel picks.
+- TCP fast open (sending with `MSG_FASTOPEN`) connects a socket without Landlock's port
+  check, on the kernels tested. Convergence denies that flag unless `tcp_connect` is `any`.
 
 ## `syscalls`
 
@@ -143,6 +155,15 @@ Argument checks on syscalls that otherwise stay allowed:
 - `personality` cannot set flags that disable address-space randomisation or make memory
   executable (`ADDR_NO_RANDOMIZE`, `READ_IMPLIES_EXEC`, `MMAP_PAGE_ZERO`,
   `ADDR_COMPAT_LAYOUT`);
+- `personality` values with bit 31 set are denied too (except the query `0xffffffff`): the
+  kernel would store them as given, flags included;
+- `prlimit64` is denied for every process but the caller. The kernel lets a process change
+  the resource limits of any process of the same user, and a CPU limit of zero gets the
+  target killed;
+- `sendto`, `sendmsg`, and `sendmmsg` are denied with `MSG_FASTOPEN`, unless `tcp_connect`
+  is `any` (see `network`);
+- `listen` is denied unless the policy grants a TCP port to bind or unix sockets can be
+  created (see `network`);
 - `socket` is limited to the families, types, and protocols the network policy grants (no
   SCTP, MPTCP, UDP-Lite, or ICMP sockets, which Landlock's port rules would not cover).
 
@@ -163,6 +184,12 @@ the C library falls back to `clone`, whose namespace flags are checked.
 | `max_open_files` | `RLIMIT_NOFILE` | 1024 |
 
 `null` turns a limit off, except `wall_clock_seconds`, which is required and at most 24 hours.
+
+**Keep `max_processes` set for code you do not trust.** When a run ends, the supervisor
+kills everything the tool started. A tool that keeps forking while it is being killed can
+only be stopped for certain because every fork uses up one of these slots. With
+`max_processes: null` that bound is gone. The supervisor then gives up after 10 seconds and
+reports how many processes are still running (`outcome.left_running` in the run record).
 
 ## `environment`
 
@@ -231,7 +258,12 @@ convergence run --policy p.yaml --timeout 30 -- COMMAND
   `execute`.
 - The run ends when the tool's first process exits. Anything it started is then killed,
   even a daemon that left the session. The run also ends at `wall_clock_seconds` or
-  `--timeout`, whichever is sooner.
+  `--timeout`, whichever is sooner. If something could not be killed, `run` says so and the
+  record's `outcome.left_running` counts it (see `resources`).
+- Below Landlock ABI 6 the tool can send signals to your other processes, including the
+  supervisor. Stopping or killing the supervisor defeats the wall-clock limit and the
+  final clean-up; the processes stay inside the sandbox. `explain` reports this as
+  `baseline.signals`.
 - The tool's stdout and stderr are passed through. Its stdin is `run`'s stdin. Core dumps
   are disabled.
 - `--trace` adds denial capture: strace watches the tool from outside the sandbox, and the

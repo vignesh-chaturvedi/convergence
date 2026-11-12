@@ -76,7 +76,13 @@ class Tracer:
         """Fork and exec strace. Must be called while the supervisor is single-threaded."""
         argv = self.argv(target)
         log = self.directory / "strace.log"
-        pid = os.fork()
+        # See supervise(): no handler may run between the fork and the child's own setup.
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, signal.valid_signals())
+        try:
+            pid = os.fork()
+        except BaseException:
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+            raise
         if pid == 0:
             try:
                 os.setsid()
@@ -96,6 +102,7 @@ class Tracer:
             except BaseException:  # noqa: S110 - the supervisor notices strace never attached
                 pass
             os._exit(127)
+        signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
         self.pid = pid
 
     def _log(self) -> str:

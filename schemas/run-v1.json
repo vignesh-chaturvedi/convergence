@@ -109,6 +109,11 @@
           "default": null,
           "title": "Exit Code"
         },
+        "left_running": {
+          "default": 0,
+          "title": "Left Running",
+          "type": "integer"
+        },
         "signal": {
           "anyOf": [
             {

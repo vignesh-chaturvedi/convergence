@@ -1,9 +1,10 @@
 # Threat model
 
-> **Status:** draft, written in Phase 3 alongside the escape matrix and before the runtime
-> exists ([PLAN.md](PLAN.md)). Every "defended" claim below becomes true only when the
-> escape-matrix case that tests it passes against a real kernel (Phase 4). Until then, read
-> this as the specification the runtime must meet, not a description of what it already does.
+> **Status:** this describes Convergence as built. The defended claims are measured by the
+> escape matrix and the test suite, on real kernels. A security review after 0.1.0 found
+> weaknesses the matrix had not covered; they are fixed, and what could not be fixed is
+> listed below. The review is in [docs/security-review.md](docs/security-review.md). Nothing
+> here has been independently audited.
 
 Convergence runs an AI agent tool — an MCP server, an agent skill, or a model-generated
 script — under a least-privilege policy enforced by the Linux kernel (Landlock,
@@ -48,13 +49,13 @@ these unless the policy explicitly allows it:
 |---|---|---|
 | Read data outside the grant | read `~/.ssh/id_ed25519`, `/etc/shadow`, another project's files | Landlock filesystem (ABI 1) |
 | Write or destroy data outside the grant | overwrite `~/.bashrc`, delete files, write a cron entry | Landlock filesystem (ABI 1) |
-| Reach the network beyond the grant | connect to an exfiltration host or an unlisted port; bind a port | Landlock TCP ports (ABI 4); seccomp for whole protocols |
+| Reach the network beyond the grant | connect to an exfiltration host or an unlisted port; bind a port | Landlock TCP ports (ABI 4); seccomp for whole protocols, TCP fast open, and (where it can) `listen` |
 | Escalate privilege | run a setuid binary to gain its owner's rights | `no_new_privs` (prctl) |
-| Inspect or tamper with other processes | `ptrace`, `process_vm_readv`, `/proc/<pid>/mem`, signals | seccomp; Landlock signal scope (ABI 6); ptrace domain rules |
+| Inspect or tamper with other processes | `ptrace`, `process_vm_readv`, `/proc/<pid>/mem`, signals, `prlimit64` on another process | seccomp; Landlock signal scope (ABI 6); ptrace domain rules |
 | Escape the confinement | `mount`, `pivot_root`, `chroot`, `unshare`, `setns`, namespace `clone` | seccomp deny list |
 | Bypass the syscall filter | `io_uring` submission queue, a foreign-architecture syscall, `seccomp` user-notify | seccomp (deny `io_uring_*`, kill on bad arch, deny `NEW_LISTENER`) |
 | Deny service to the host | fork bomb, memory or CPU exhaustion, fill a disk, exhaust file descriptors | rlimits + the wall-clock supervisor |
-| Persist beyond the run | a double-forked or `setsid` daemon that outlives the tool | supervisor: subreaper + process-group kill |
+| Persist beyond the run | a double-forked or `setsid` daemon that outlives the tool; a tool that keeps forking while it is killed | supervisor: subreaper, process-group kill, and a sweep of every descendant |
 | Steal ambient secrets | read the supervisor's environment, or an inherited file descriptor | supervisor: empty environment, close inherited fds |
 
 Each row corresponds to one or more escape-matrix categories
@@ -72,9 +73,17 @@ on a given kernel is what the matrix measures.
   SCTP, MPTCP, UDP-Lite, and ICMP cannot bypass Landlock's TCP and UDP rules), and applies
   integer-argument rules (namespace flags on `clone`, `TIOCSTI`/`TIOCLINUX` on `ioctl`,
   `NEW_LISTENER` on `seccomp`, `personality` flags that disable address-space randomisation
-  or make memory executable). Arguments the kernel truncates to 32 bits are compared so that
-  setting the high bits cannot slip past a rule. Foreign-architecture syscalls hit the kill
-  action.
+  or make memory executable). It also denies three things the kernel would otherwise allow
+  past Landlock or between processes of one user:
+  - sending with `MSG_FASTOPEN`, which connects a TCP socket without Landlock's port check
+    (unless `tcp_connect` is `any`);
+  - `listen`, unless the policy grants a TCP port to bind or unix sockets can be created: a
+    socket that listens without binding gets a port Landlock never checks;
+  - `prlimit64` on any process but the caller: the kernel lets a process change the limits
+    of every process of the same user, and a CPU limit of zero gets the target killed.
+
+  Arguments the kernel truncates to 32 bits are compared so that setting the high bits
+  cannot slip past a rule. Foreign-architecture syscalls hit the kill action.
 - **`no_new_privs`** stops a setuid or file-capability binary from raising privileges, and is
   required for unprivileged seccomp.
 - **Resource limits** (`RLIMIT_*`) bound CPU time, private memory, file size, open files, and
@@ -83,7 +92,10 @@ on a given kernel is what the matrix measures.
   closes every inherited descriptor above stderr, starts a new session with no controlling
   terminal, and becomes a subreaper. When the tool's first process exits, or at the
   wall-clock deadline, it kills the process group and every remaining descendant, including
-  daemons that left the session. Core dumps are disabled. The spawn sequence is in
+  daemons that left the session. It signals parents before children and reaps nothing until
+  all are dead, so a tool that keeps forking runs out of `RLIMIT_NPROC` slots instead of
+  outrunning the kill. If it still cannot kill everything, the run record says how many
+  processes are left. Core dumps are disabled. The spawn sequence is in
   [ADR 0006](docs/adr/0006-spawn-model.md).
 
 ## Why not seccomp user notification for argument checks
@@ -131,6 +143,12 @@ escapes:
 - **Signals to same-user processes.** Scoping signals to the sandbox needs Landlock ABI 6.
   On ABI 4 (stock Ubuntu 24.04) a sandboxed tool can send signals to other processes run by
   the same user. Enforced from ABI 6.
+  - **This includes Convergence's own supervisor** (measured: a tool sent it `SIGSTOP` and
+    was still running after the wall-clock limit). A stopped or killed supervisor enforces
+    no time limit and does no clean-up. The tool's processes stay inside the sandbox.
+  - A tool that does not need to send signals can be denied the calls with
+    `syscalls.deny: [kill, tkill, tgkill, rt_sigqueueinfo, rt_tgsigqueueinfo,
+    pidfd_send_signal]`.
 - **File metadata.** On **every** ABI, Landlock does not control `stat`, `access`, `chdir`,
   `chmod`, `chown`, `setxattr`, or `utime` (stated in the kernel's
   `include/uapi/linux/landlock.h`). A sandboxed tool can learn that files exist outside its
@@ -155,10 +173,32 @@ escapes:
   execute for anything to run. Running `ld.so <binary>` then maps a program the tool can
   only *read*, and Landlock never checks memory mapped as executable. The same holds for an
   interpreter loading a readable script or shared library, and for code the tool writes into
-  memory. Execute grants decide which programs the kernel will start directly; they are not
-  a boundary against running code the tool can read. Everything that runs this way still
-  runs inside the same sandbox, so it gains no access the tool did not already have. Grant
-  read narrowly if a readable binary would be dangerous to run.
+  memory. The kernel will even start a program directly from memory (measured: a copy of
+  `/usr/bin/id` in a `memfd` ran with `execve` under a policy that grants only the
+  interpreter). Execute grants decide which **files** the kernel will start; they are not
+  a boundary against running code the tool can read or write. Everything that runs this way
+  still runs inside the same sandbox, so it gains no access the tool did not already have.
+  Grant read narrowly if a readable binary would be dangerous to run.
+- **Listening on a port the kernel picks.** `tcp_bind` limits explicit binds. A TCP socket
+  that listens without binding gets an ephemeral port, and Landlock does not check it.
+  Convergence denies `listen` where nothing granted needs it. Where it must stay allowed (a
+  TCP port to bind is granted, or unix sockets can be created, which from Landlock ABI 9 is
+  the default), the tool can accept TCP connections on such a port.
+- **The scheduling of other processes.** The tool can change the priority, CPU affinity,
+  and scheduling class of other processes run by the same user (measured), and so slow
+  them down. The same calls set these for a program's own threads, so they are not denied.
+- **Grants inside a directory the tool may write to.** The tool can replace such a path
+  with a symbolic link for the next run. `run` refuses a path that leaves the directories
+  granted for writing that way. It only knows the policy it is given: if a *different*
+  policy lets other code write where this policy's grants live, that code can redirect
+  them. The same holds for the directory of policies given to `convergence mcp`.
+- **Clean-up needs a process limit.** The final sweep ends for certain only because each
+  fork uses up an `RLIMIT_NPROC` slot. With `resources.max_processes: null`, a tool that
+  keeps forking can outlast it. The supervisor then gives up after 10 seconds and reports
+  the number of processes left.
+- **The terminal.** `convergence run` passes its own stdin to the tool. If that is a
+  terminal, the tool can read what is typed during the run and change terminal settings.
+  The tool's output is passed through as written, escape sequences included.
 - **Denial capture runs outside the sandbox.** `convergence run --trace` attaches strace to
   the tool from outside (ADR 0007). strace decodes memory the tool controls. It runs with
   `no_new_privs` and a seccomp filter that denies sockets and the dangerous syscalls it does
@@ -169,6 +209,11 @@ escapes:
   JSON they parse and the policies they load. A client allowed to send inline policies
   (`--allow-inline-policy`) chooses its own sandbox. That is why the default is the
   operator's `--policies` directory.
+  - `${CWD}` in a policy follows the directory a call runs in. So the client may only name
+    the server's own directory or one beneath it, unless the operator passes
+    `--allow-any-cwd`.
+  - The client decides whether a call is traced, so it can turn on the tracer described
+    above.
 - **A supervisor killed with `SIGKILL`.** The tool's first process dies with it
   (`PR_SET_PDEATHSIG`). Processes the tool started are re-parented to the next subreaper or
   to init, and keep running inside the sandbox until they exit. Stopping the supervisor any

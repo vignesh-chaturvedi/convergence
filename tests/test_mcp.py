@@ -91,13 +91,37 @@ def test_refusals_reach_the_client(setup: tuple[Path, Path, Path]) -> None:
         ),
         ("run_sandboxed", {"command": [], "policy": "py"}, "non-empty list of strings"),
         ("run_sandboxed", {"command": true, "policy": "py", "cwd": "rel"}, "absolute directory"),
+        (
+            "run_sandboxed",
+            {"command": true, "policy": "py", "cwd": str(policies)},
+            "or a directory beneath it",
+        ),
+        ("run_sandboxed", {"command": true, "policy": "py\n"}, "does not accept policy text"),
         ("generate_policy", {"observation": "/etc/passwd"}, "observation JSON or the id"),
         ("explain_denials", {"run_id": "../../x"}, "not a run id"),
+        ("explain_denials", {"run_id": "20260101T000000Z-0123abcd\n"}, "not a run id"),
     ]
     for name, arguments, message in cases:
         result = anyio.run(call, tools, name, arguments)
         assert result.is_error, (name, arguments)
         assert message in result.content[0].text
+
+
+def test_cwd_stays_under_the_servers_directory(setup: tuple[Path, Path, Path]) -> None:
+    policies, work, _ = setup
+    (work / "sub").mkdir()
+    (work / "way-out").symlink_to(policies)
+    tools = Tools(Config(policies=policies, cwd=work))
+    assert tools.cwd(None) == str(work.resolve())
+    assert tools.cwd(str(work / "sub")) == str((work / "sub").resolve())
+    # ${CWD} in a policy follows cwd, so a client must not be able to move it elsewhere.
+    for elsewhere in (policies, work.parent, Path("/"), work / "way-out", work / "sub" / ".."):
+        if elsewhere.resolve() == work.resolve():
+            continue
+        with pytest.raises(ValueError, match="beneath it"):
+            tools.cwd(str(elsewhere))
+    anywhere = Tools(Config(policies=policies, cwd=work, allow_any_cwd=True))
+    assert anywhere.cwd(str(policies)) == str(policies.resolve())
 
 
 @pytest.mark.kernel

@@ -42,6 +42,7 @@ class Config:
     policies: Path | None = None
     allow_inline_policy: bool = False
     allow_observe: bool = False
+    allow_any_cwd: bool = False
     cwd: Path = field(default_factory=Path.cwd)
 
     def problems(self) -> list[str]:
@@ -79,7 +80,7 @@ class Tools:
     def policy_path(self, policy: str) -> Path:
         """A policy name from --policies, or (if allowed) policy text saved by its digest."""
         directory = self.config.policies
-        if directory is not None and POLICY_NAME.match(policy):
+        if directory is not None and POLICY_NAME.fullmatch(policy):
             for suffix in POLICY_SUFFIXES:
                 candidate = directory / f"{policy}{suffix}"
                 if candidate.is_file():
@@ -117,12 +118,25 @@ class Tools:
         return sorted(p.stem for p in directory.iterdir() if p.suffix in (".yaml", ".yml", ".json"))
 
     def cwd(self, cwd: str | None) -> str:
+        """Where the command runs. ``${CWD}`` in a policy follows it.
+
+        So a client that could name any directory could move the operator's ``${CWD}``
+        grants onto it. Unless the operator allows that, the directory must be the server's
+        own or one beneath it, after resolving symbolic links.
+        """
+        root = self.config.cwd.resolve()
         if cwd is None:
-            return str(self.config.cwd)
+            return str(root)
         path = Path(cwd)
         if not path.is_absolute() or not path.is_dir():
             raise ValueError("cwd must be an existing absolute directory")
-        return str(path)
+        resolved = path.resolve()
+        if not self.config.allow_any_cwd and resolved != root and root not in resolved.parents:
+            raise ValueError(
+                f"cwd must be {root} or a directory beneath it: ${{CWD}} in a policy follows "
+                "cwd, and this server was not started with --allow-any-cwd"
+            )
+        return str(resolved)
 
     @staticmethod
     def command(command: list[str]) -> list[str]:
@@ -166,6 +180,7 @@ class Tools:
             "exit_code": outcome["exit_code"],
             "signal": outcome["signal"],
             "convergence_exit_code": outcome["convergence_exit_code"],
+            "left_running": outcome["left_running"],
             "error": outcome["error"],
             "stdout": record["stdout"]["kept"],
             "stdout_truncated": record["stdout"]["truncated"],
@@ -200,7 +215,7 @@ class Tools:
         text = observation.strip()
         if text.startswith("{"):
             parsed = adapter().validate_json(text)
-        elif RUN_ID.match(text):
+        elif RUN_ID.fullmatch(text):
             parsed = load(runs_dir().parent / "observations" / f"{text}.json")
         else:
             raise ValueError("observation must be observation JSON or the id of a saved one")
@@ -215,7 +230,7 @@ class Tools:
         from convergence.generate.explain import explain_run, find_record, load_record
         from convergence.policy.load import PolicyError, load_policy
 
-        if not RUN_ID.match(run_id):
+        if not RUN_ID.fullmatch(run_id):
             raise ValueError("run_id is not a run id")
         record = load_record(find_record(run_id, runs_dir()))
         try:
@@ -358,6 +373,10 @@ def main(config: Config) -> int:
         )
     if config.allow_observe:
         sys.stderr.write("convergence mcp: --allow-observe: observe runs commands UNCONFINED\n")
+    if config.allow_any_cwd:
+        sys.stderr.write(
+            "convergence mcp: --allow-any-cwd: clients choose the directory ${CWD} stands for\n"
+        )
     tools = Tools(config, Helper())  # the helper starts before the event loop and its threads
     try:
         anyio.run(build_server(tools).run_stdio_async)

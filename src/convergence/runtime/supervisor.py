@@ -1,9 +1,10 @@
 """The supervisor: start the sandboxed tool, contain it, and record the run (ADR 0006).
 
-It is a child subreaper, so every process the tool leaves behind becomes its child. The run
-ends when the tool's first process exits, when the wall-clock deadline passes, or when the
-supervisor itself is told to stop. Then it kills the tool's process group, and keeps killing
-and reaping its own children until none are left.
+It is a child subreaper, so every process the tool leaves behind becomes its descendant.
+The run ends when the tool's first process exits, when the wall-clock deadline passes, or
+when the supervisor itself is told to stop. Then it kills the tool's process group and every
+descendant, and reaps them only once all are dead (``kill_everything``). If it cannot kill
+everything in time, the record says how many processes are still running.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ import select
 import signal
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 from types import FrameType
 
@@ -51,6 +53,10 @@ from convergence.runtime.tracer import Tracer
 RELAY_THREADS = 2  # stdout and stderr; they count towards RLIMIT_NPROC like any task
 DEFAULT_KEEP = 1024 * 1024  # bytes of each stream kept in the run record
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+KILL_SECONDS = 10.0  # how long the final sweep keeps killing before it gives up
+REAP_SECONDS = 5.0  # how long it then waits for killed processes to finish exiting
+SWEEP_PAUSE = 0.0005  # between sweeps: time for the kernel to deliver the signals
+SWEEP_DEPTH = 128  # /proc directories held open at once while walking the process tree
 
 
 class _Stopped(Exception):
@@ -98,17 +104,75 @@ class Relay(threading.Thread):
         )
 
 
-def own_children() -> list[int]:
-    """Direct children of this process, including orphans re-parented to it."""
-    found: set[int] = set()
+@dataclass(slots=True)
+class Cleanup:
+    """What the final sweep did."""
+
+    killed: set[int] = field(default_factory=set)  # pids found still running, and killed
+    left_running: int = 0  # still running when the sweep gave up; 0 means everything is gone
+    statuses: dict[int, int] = field(default_factory=dict)  # wait status of each child reaped
+
+
+@cache
+def _children_files() -> bool:
+    """Whether this kernel lists children in /proc (CONFIG_PROC_CHILDREN)."""
+    return os.path.exists(f"/proc/self/task/{threading.get_native_id()}/children")
+
+
+def _read_at(dirfd: int, name: str) -> str | None:
+    """The contents of ``name`` beneath an open /proc directory, or None if it is gone."""
     try:
-        for tid in os.listdir("/proc/self/task"):
-            text = Path(f"/proc/self/task/{tid}/children").read_text()
-            found.update(int(pid) for pid in text.split())
-        return sorted(found)
+        fd = os.open(name, os.O_RDONLY | os.O_CLOEXEC, dir_fd=dirfd)
     except OSError:
-        pass  # no CONFIG_PROC_CHILDREN: scan every process's parent instead
-    me = os.getpid()
+        return None
+    try:
+        data = bytearray()
+        while chunk := os.read(fd, 65536):
+            data += chunk
+        return data.decode(errors="replace")
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
+def _state_and_parent(dirfd: int) -> tuple[str, int] | None:
+    """``(state, parent pid)`` of the process behind ``dirfd``, or None once it is reaped."""
+    text = _read_at(dirfd, "stat")
+    if not text:
+        return None
+    fields = text[text.rfind(")") + 2 :].split()  # the name may itself contain ") "
+    if len(fields) < 2:
+        return None
+    return fields[0], int(fields[1])
+
+
+def _threads(dirfd: int) -> list[str]:
+    try:
+        fd = os.open("task", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC, dir_fd=dirfd)
+    except OSError:
+        return []
+    try:
+        return os.listdir(fd)
+    except OSError:
+        return []
+    finally:
+        os.close(fd)
+
+
+def _children(dirfd: int, threads: list[str]) -> list[int]:
+    """Children of every thread of the process behind ``dirfd``."""
+    found: list[int] = []
+    for tid in threads:
+        text = _read_at(dirfd, f"task/{tid}/children")
+        if text:
+            found += [int(pid) for pid in text.split()]
+    return found
+
+
+def _children_by_parent() -> dict[int, list[int]]:
+    """Without CONFIG_PROC_CHILDREN: every process's children, from one scan of /proc."""
+    children: dict[int, list[int]] = {}
     for entry in os.scandir("/proc"):
         if not entry.name.isdigit():
             continue
@@ -117,33 +181,155 @@ def own_children() -> list[int]:
         except OSError:
             continue
         fields = stat_line[stat_line.rfind(")") + 2 :].split()
-        if int(fields[1]) == me:
-            found.add(int(entry.name))
-    return sorted(found)
+        if len(fields) >= 2:
+            children.setdefault(int(fields[1]), []).append(int(entry.name))
+    return children
 
 
-def kill_everything(pgid: int, exclude: frozenset[int] = frozenset()) -> int:
-    """Kill the tool's process group and every child of this process. Returns how many died.
+def _open_proc(pid: int | str) -> int | None:
+    try:
+        return os.open(f"/proc/{pid}", os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    except OSError:
+        return None
 
-    Only this process's own children are signalled by pid, and a child's pid cannot be
-    reused before it is reaped, so nothing outside the run can be hit. ``exclude`` keeps the
-    tracer alive so it can flush its output.
+
+def own_children() -> list[int]:
+    """Direct children of this process, including orphans re-parented to it."""
+    root = _open_proc("self")
+    if root is None:
+        return []
+    try:
+        if _children_files():
+            return sorted(set(_children(root, _threads(root))))
+        return sorted(_children_by_parent().get(os.getpid(), []))
+    finally:
+        os.close(root)
+
+
+def _sweep(exclude: frozenset[int], killed: set[int]) -> int:
+    """Send SIGKILL to every running descendant, parents before children.
+
+    Returns how many were still running. Nothing is reaped here (see ``kill_everything``).
+
+    A pid read from /proc may have been reused by the time it is used. So each process is
+    opened as a /proc directory, which keeps naming that one process, and is only accepted
+    while it is still a child of the process it was listed under. The signal is then sent
+    through that descriptor, never by pid.
     """
-    killed = 0
-    for _ in range(10_000):
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(pgid, signal.SIGKILL)
-        children = [pid for pid in own_children() if pid not in exclude]
-        if not children:
+    scanned = None if _children_files() else _children_by_parent()
+
+    def children_of(pid: int, dirfd: int, threads: list[str]) -> list[int]:
+        return _children(dirfd, threads) if scanned is None else scanned.get(pid, [])
+
+    me = os.getpid()
+    root = _open_proc("self")
+    if root is None:
+        return 0
+    running = 0
+    stack: list[tuple[int, int, list[int]]] = [(me, root, children_of(me, root, _threads(root)))]
+    try:
+        while stack:
+            parent, parent_fd, pending = stack[-1]
+            if not pending:
+                stack.pop()
+                os.close(parent_fd)
+                continue
+            pid = pending.pop()
+            if pid in exclude:
+                continue
+            fd = _open_proc(pid)
+            if fd is None:
+                continue
+            info = _state_and_parent(fd)
+            if (
+                info is None
+                or info[1] != parent
+                or (parent != me and _state_and_parent(parent_fd) is None)
+            ):
+                os.close(fd)
+                continue
+            threads = _threads(fd)
+            # A zombie leader with live threads is still a running process.
+            if info[0] not in ("Z", "X") or len(threads) > 1:
+                running += 1
+                killed.add(pid)
+                with contextlib.suppress(OSError):
+                    signal.pidfd_send_signal(fd, signal.SIGKILL)
+            below = children_of(pid, fd, threads)
+            if below and len(stack) < SWEEP_DEPTH:
+                stack.append((pid, fd, below))
+            else:
+                # Anything deeper is re-parented to this process when its parent dies, and
+                # is found by the next sweep.
+                os.close(fd)
+    finally:
+        for _, fd, _ in stack:
+            os.close(fd)
+    return running
+
+
+def _is_unreaped_child(pid: int) -> bool:
+    try:
+        os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except OSError:
+        return False
+    return True
+
+
+def kill_everything(
+    pgid: int, exclude: frozenset[int] = frozenset(), patience: float = KILL_SECONDS
+) -> Cleanup:
+    """Kill the tool's process group and every descendant of this process, then reap them.
+
+    A tool can keep forking while it is being killed, and a process that has left the
+    process group has to be signalled one at a time. Two things make the sweep end:
+    - nothing is reaped until every descendant is dead. A dead process keeps counting
+      against ``RLIMIT_NPROC`` until it is reaped, so every fork the tool wins uses up a
+      slot that is not given back;
+    - parents are signalled before their children, so a parent cannot reap a child the
+      sweep has just killed and free a slot that way.
+
+    Without ``resources.max_processes`` there is no such bound. The sweep then stops after
+    ``patience`` seconds and reports what is still running in ``left_running``.
+
+    ``exclude`` keeps the tracer alive so it can flush its output.
+    """
+    result = Cleanup()
+    # The group id stays the tool's while its first process is unreaped; after that the
+    # number could be reused for a group that has nothing to do with this run.
+    leader_is_ours = _is_unreaped_child(pgid)
+    give_up = time.monotonic() + patience
+    while True:
+        running = _sweep(exclude, result.killed)
+        if leader_is_ours:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(pgid, signal.SIGKILL)
+        if not running:
             break
-        for pid in children:
-            with contextlib.suppress(ProcessLookupError):
-                os.kill(pid, signal.SIGKILL)
-        for pid in children:
-            with contextlib.suppress(ChildProcessError):
-                os.waitpid(pid, 0)
-                killed += 1
-    return killed
+        if time.monotonic() >= give_up:
+            result.left_running = running
+            break
+        time.sleep(SWEEP_PAUSE)
+
+    # Reap. Every dead descendant is by now a child of this process.
+    reap_until = time.monotonic() + REAP_SECONDS
+    while True:
+        waiting = False
+        for pid in own_children():
+            if pid in exclude or pid in result.statuses:
+                continue
+            try:
+                done, status = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                continue
+            if done:
+                result.statuses[pid] = status
+            else:
+                waiting = True
+        if not waiting or result.left_running or time.monotonic() >= reap_until:
+            break
+        time.sleep(SWEEP_PAUSE)
+    return result
 
 
 def _wait_for_exit(pid: int, deadline: float) -> bool:
@@ -251,7 +437,11 @@ def not_started_record(argv: list[str], options: Options, error: RunError) -> Ru
 
 
 def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecord:
-    """Run the plan to completion. Always returns a record; never leaves a process behind."""
+    """Run the plan to completion. Always returns a record.
+
+    Every process of the run is killed before it returns. If that fails, the record's
+    ``outcome.left_running`` says how many are still running.
+    """
     record = _base_record(plan, plan.argv, options)
     record.executable = plan.executable
     record.enforcement = {
@@ -338,9 +528,16 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
     stopped_by: int | None = None
     status: int | None = None
     try:
-        pid = os.fork()
-        if pid == 0:
-            child_mod.run_child(setup)  # never returns
+        # A stop signal must not be handled between the fork and the line that stores the
+        # child's pid, in either process: the parent would lose track of the child, and the
+        # child would carry on as a second supervisor. The child unblocks in run_child.
+        blocked = signal.pthread_sigmask(signal.SIG_BLOCK, STOP_SIGNALS)
+        try:
+            pid = os.fork()
+            if pid == 0:
+                child_mod.run_child(setup)  # never returns
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
         for fd in (report_w, out_w, err_w):
             os.close(fd)
         if tracer is not None and trace_fds is not None:
@@ -358,9 +555,9 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
         for relay in relays:
             relay.start()
 
-        if _wait_for_exit(pid, deadline):
-            _, status, _ = os.wait4(pid, 0)
-        else:
+        # The first process is not reaped here: while it is a zombie, its pid cannot be
+        # reused, so the process-group kill below cannot hit anything else.
+        if not _wait_for_exit(pid, deadline):
             timed_out = True
     except _Stopped as exc:
         stopped_by = exc.signum
@@ -373,13 +570,13 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
                 with contextlib.suppress(OSError):
                     os.close(fd)
         tracer_pids = frozenset({tracer.pid}) if tracer and tracer.pid else frozenset()
+        cleanup = Cleanup()
         if pid > 0:
-            descendants = kill_everything(pid, exclude=tracer_pids)
-            if status is None:
+            cleanup = kill_everything(pid, exclude=tracer_pids)
+            status = cleanup.statuses.get(pid, status)
+            if status is None and not cleanup.left_running:
                 with contextlib.suppress(ChildProcessError):
                     _, status, _ = os.wait4(pid, 0)
-        else:
-            descendants = 0
         if tracer is not None:
             tracer.finish()
             if record.tracing.active and plan.attribution is not None:
@@ -409,9 +606,13 @@ def supervise(plan: Plan, wall_clock_seconds: int, options: Options) -> RunRecor
     if relays:
         record.stdout = relays[0].record(passed_through=not options.capture_only)
         record.stderr = relays[1].record(passed_through=not options.capture_only)
-    # The first process exited before the run was stopped: its own status is the result.
-    killed = descendants - (1 if (timed_out or stopped_by is not None) else 0)
-    outcome = Outcome(status="exited", convergence_exit_code=0, descendants_killed=max(killed, 0))
+    # The first process is not a descendant it left behind, even when the run killed it.
+    outcome = Outcome(
+        status="exited",
+        convergence_exit_code=0,
+        descendants_killed=len(cleanup.killed - {pid}),
+        left_running=cleanup.left_running,
+    )
     if stopped_by is not None:
         outcome.status = "interrupted"
         outcome.signal = signal.Signals(stopped_by).name

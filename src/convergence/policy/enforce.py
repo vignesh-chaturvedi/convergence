@@ -235,7 +235,7 @@ def _baseline(
         RuleAssessment(
             "baseline.syscalls",
             f"built-in deny list ({len(DENIED_SYSCALLS)} syscalls, plus argument checks on clone, "
-            "seccomp, ioctl, personality, socket)",
+            "seccomp, ioctl, personality, prlimit64, socket, listen, and the send calls)",
             "seccomp-bpf",
             Status.ENFORCED if seccomp else Status.UNENFORCEABLE,
             "" if seccomp else "seccomp filtering is not available",
@@ -295,7 +295,8 @@ def _baseline(
                 "Landlock ABI 6+",
                 Status.NOT_AVAILABLE,
                 "this kernel cannot scope signals: the sandboxed tool can send signals to other "
-                "processes run by the same user",
+                "processes run by the same user, including Convergence's supervisor (stopping "
+                "or killing it defeats the wall-clock limit and the final clean-up)",
             )
         )
     # Landlock does not control these syscall families on any ABI (warning in
@@ -319,6 +320,17 @@ def _baseline(
             "the tool can change permissions, group ownership, extended attributes, and "
             "timestamps of files the user owns, wherever they are; it cannot read or change "
             "their contents. Convergence does not mitigate this yet",
+        )
+    )
+    info.append(
+        RuleAssessment(
+            "baseline.scheduling",
+            "the scheduling of processes outside the sandbox cannot be changed",
+            "not controlled by Landlock or the syscall filter",
+            Status.NOT_AVAILABLE,
+            "the tool can change the priority, CPU affinity, and scheduling class of other "
+            "processes run by the same user (the calls also set them for a program's own "
+            "threads, so they are not denied); it cannot read or change their data",
         )
     )
     return blocking, info

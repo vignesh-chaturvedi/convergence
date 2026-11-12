@@ -8,6 +8,16 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `convergence.api.Sandbox`: run sandboxed commands from Python in a warm process, through
+  the spawn helper (one fork and the sandbox setup per call).
+- Benchmarks (`benchmarks/bench.py`, ADR 0011). Compared: no sandbox, `sudo`, Convergence
+  (warm library API with and without `--trace`, MCP, cold CLI), bubblewrap, and `docker run`
+  warm and cold; 200 runs per cell. The README table is generated from the results, and a
+  test keeps it in sync. On the development VM, `/usr/bin/true` takes 7.9 ms at the median
+  through the warm API, against 107 ms for warm `docker run` and 0.21 ms with no sandbox.
+  bubblewrap cannot run unprivileged on stock Ubuntu 24.04. A manual workflow measures a
+  GitHub-hosted x86_64 runner.
+
 - `convergence mcp` (ADR 0010), an MCP server over stdio. It needs the optional
   `convergence-sandbox[mcp]` extra (`mcp` 2.3.0).
   - Tools: `run_sandboxed`, `check_policy`, `generate_policy`, `explain_denials`, and

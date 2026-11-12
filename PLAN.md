@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 6 done (exit gate met); Phase 7 next · **Last updated:** 2026-11-12
+**Status:** Phase 7 in progress: VM results done; CI x86_64 run pending · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -654,6 +654,34 @@ the importer passes on real Divergence output.
   and a page-cache drop; that needs sudo in the VM, for the benchmark harness only.
 - The numbers are published whatever they turn out to be.
 
+**Progress (Phase 7):**
+- **Method fixed in ADR 0011 before the first run.** One deviation from the plan above:
+  bubblewrap cannot run unprivileged on stock Ubuntu 24.04. AppArmor restricts unprivileged
+  user namespaces, so it fails with "setting up uid map: Permission denied". Making it run
+  would mean an AppArmor profile, a change to the host's security configuration that was
+  not made. It is reported as `n/a` with the reason, and measured wherever it can run.
+- **Docker** is `docker.io` 29.1.3 in the VM, used through `sudo -n` rather than the `docker`
+  group, which is root-equivalent. `sudo` is measured as its own row.
+- **Cold Docker:** each run stops the daemon, drops the page cache, and starts it again.
+  systemd's start-rate limit refused frequent restarts until its counter was reset each time.
+- **Library API:** `convergence.api.Sandbox`, a warm runner over the spawn helper.
+- **VM results** (200 runs per cell, `results/lima-ubuntu-24.04-ga-aarch64.*`), p50 for
+  `/usr/bin/true`:
+
+  | Configuration | p50 |
+  |---|---|
+  | no sandbox | 0.21 ms |
+  | Convergence, warm library API | 7.9 ms |
+  | Convergence, MCP | 8.6 ms |
+  | Convergence, `--trace` | 23 ms |
+  | Convergence CLI, cold | 114 ms |
+  | `docker run`, warm | 107 ms |
+  | `docker run`, cold | 151 ms |
+
+  The README table is generated from that JSON, and a test fails if they drift.
+- **Pending:** the GitHub-hosted x86_64 run (manual `benchmarks` workflow), committed and
+  labelled noisy.
+
 **Exit gate:** the table regenerates from one command, and the README table is generated
 from the results.
 
@@ -725,5 +753,5 @@ from the results.
 | 4 | Runtime enforcement and holdout | done | see git log | |
 | 5 | Observe, generate, importer, denial explain | done | see git log | |
 | 6 | MCP server | done | see git log | |
-| 7 | Benchmarks | not started | | |
+| 7 | Benchmarks | in progress: VM done, CI x86_64 pending | | |
 | 8 | PyPI release | not started | | |

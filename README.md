@@ -74,6 +74,34 @@ reports what that kernel *cannot* do. For example, signal and abstract-unix-sock
 ([sample output](docs/evidence/doctor/lima-ubuntu-24.04-ga-aarch64.txt),
 [ABI reference](docs/landlock-abi.md)).
 
+## What it costs
+
+<!-- benchmarks:start -->
+Generated from [`benchmarks/results/lima-ubuntu-24.04-ga-aarch64.json`](benchmarks/results/lima-ubuntu-24.04-ga-aarch64.json) by `benchmarks/bench.py`: development VM (Apple M2, Lima vz), 4 CPUs, kernel 6.8.0-134-generic (aarch64). Wall-clock time to start the workload and see it exit; p50 (p95) in milliseconds over 200 runs.
+
+| Configuration | `true` p50 (p95) ms | `python` p50 (p95) ms | `wordcount` p50 (p95) ms |
+|---|---:|---:|---:|
+| no sandbox (`subprocess`) | 0.21 (0.27) | 7.72 (8.91) | 16.65 (18.48) |
+| `sudo -n true` (inside every Docker row) | 2.64 (3.74) | 2.6 (3.19) | 2.66 (3.84) |
+| Convergence, library API, warm | 7.89 (10.62) | 16.41 (21.06) | 26.83 (32.78) |
+| Convergence, library API, warm, `--trace` | 23.09 (26.58) | 67.03 (74.55) | 82.47 (92.23) |
+| Convergence, one MCP `run_sandboxed` call | 8.64 (11.03) | 16.84 (20.41) | 26.6 (34.02) |
+| Convergence CLI, cold process | 114.37 (127.58) | 122.65 (135.06) | 132.79 (147.29) |
+| bubblewrap | n/a | n/a | n/a |
+| `docker run --rm`, warm | 106.64 (139.13) | 116.17 (139.36) | 138.15 (171.59) |
+| `docker run --rm`, cold daemon and cache | 151.08 (200.74) | 161.39 (193.82) | 195.47 (348.86) |
+
+n/a: bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+<!-- benchmarks:end -->
+
+- **What the rows include.** Each Docker row includes `sudo` (its own row), and the cold CLI
+  row includes starting Python. A warm call, through the library API or MCP, costs a fork
+  and the sandbox setup.
+- **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04 at all. AppArmor restricts
+  the user namespaces it needs; Convergence uses none.
+- Method: [ADR 0011](docs/adr/0011-benchmark-method.md). All results, including a
+  GitHub-hosted x86_64 runner (noisy): [benchmarks/](benchmarks/README.md).
+
 ## Generate a policy from what a tool does: `observe` and `generate`
 
 ```bash

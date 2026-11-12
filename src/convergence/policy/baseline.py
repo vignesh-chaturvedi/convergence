@@ -134,13 +134,13 @@ ARGUMENT_RULES: tuple[ArgumentRule, ...] = (
     ArgumentRule("ioctl", "TIOCSTI and TIOCLINUX are denied (terminal input injection)"),
     ArgumentRule(
         "personality",
-        "only queries and the values Docker's default profile allows (no disabling of address "
-        "space randomisation)",
+        "denied when it sets ADDR_NO_RANDOMIZE, READ_IMPLIES_EXEC, MMAP_PAGE_ZERO, or "
+        "ADDR_COMPAT_LAYOUT (no disabling of address space randomisation); queries work",
     ),
     ArgumentRule(
         "socket",
-        "only the families and types the network policy grants: unix (if allowed), and IPv4/IPv6 "
-        "TCP or UDP (if any port is granted)",
+        "only the families, types, and protocols the network policy grants: unix (if allowed), "
+        "and IPv4/IPv6 TCP or UDP (if any port is granted), with no other protocol",
     ),
 )
 

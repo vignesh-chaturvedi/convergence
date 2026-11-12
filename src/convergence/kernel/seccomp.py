@@ -281,15 +281,29 @@ def library() -> Library:
     raise SeccompUnavailable("libseccomp could not be loaded (" + "; ".join(errors) + ")")
 
 
-def install_program(program: bytes) -> None:
-    """Install a classic BPF program on the calling thread.
+@dataclass(frozen=True, slots=True)
+class PreparedProgram:
+    """A BPF program laid out in memory, ready for ``prctl`` without further allocation."""
 
-    The thread must already have ``no_new_privs`` set. Once installed, the filter cannot be
-    removed, and it is inherited by children and kept across execve.
-    """
+    buffer: ctypes.Array[ctypes.c_char]
+    fprog: _SockFprog
+    address: int  # of ``fprog``
+
+
+def prepare_program(program: bytes) -> PreparedProgram:
     count, rem = divmod(len(program), BPF_INSTRUCTION_SIZE)
     if rem or not 0 < count <= 0xFFFF:
         raise ValueError(f"invalid BPF program size {len(program)}")
     buf = ctypes.create_string_buffer(program, len(program))
     fprog = _SockFprog(len=count, filter=ctypes.addressof(buf))
-    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, ctypes.addressof(fprog))
+    return PreparedProgram(buf, fprog, ctypes.addressof(fprog))
+
+
+def install_program(program: bytes | PreparedProgram) -> None:
+    """Install a classic BPF program on the calling thread.
+
+    The thread must already have ``no_new_privs`` set. Once installed, the filter cannot be
+    removed, and it is inherited by children and kept across execve.
+    """
+    prepared = program if isinstance(program, PreparedProgram) else prepare_program(program)
+    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, prepared.address)

@@ -68,17 +68,23 @@ on a given kernel is what the matrix measures.
   rename tricks do not widen access.
 - **seccomp-bpf** installs a kernel-only filter (never user-notification as a security
   boundary; see below). It denies a fixed list of escape- and tamper-prone syscalls,
-  restricts socket families and types to what the network policy grants, and applies
+  restricts socket families, types, and protocols to what the network policy grants (so
+  SCTP, MPTCP, UDP-Lite, and ICMP cannot bypass Landlock's TCP and UDP rules), and applies
   integer-argument rules (namespace flags on `clone`, `TIOCSTI`/`TIOCLINUX` on `ioctl`,
-  `NEW_LISTENER` on `seccomp`). Foreign-architecture syscalls hit the kill action.
+  `NEW_LISTENER` on `seccomp`, `personality` flags that disable address-space randomisation
+  or make memory executable). Arguments the kernel truncates to 32 bits are compared so that
+  setting the high bits cannot slip past a rule. Foreign-architecture syscalls hit the kill
+  action.
 - **`no_new_privs`** stops a setuid or file-capability binary from raising privileges, and is
   required for unprivileged seccomp.
 - **Resource limits** (`RLIMIT_*`) bound CPU time, private memory, file size, open files, and
   processes.
 - **The supervisor** gives the child an empty environment plus only the policy's variables,
   closes every inherited descriptor above stderr, starts a new session with no controlling
-  terminal, becomes a subreaper, and kills the whole process group at the wall-clock
-  deadline or on exit.
+  terminal, and becomes a subreaper. When the tool's first process exits, or at the
+  wall-clock deadline, it kills the process group and every remaining descendant, including
+  daemons that left the session. Core dumps are disabled. The spawn sequence is in
+  [ADR 0006](docs/adr/0006-spawn-model.md).
 
 ## Why not seccomp user notification for argument checks
 
@@ -143,11 +149,20 @@ escapes:
 
 ## Residual risks even when everything is enforced
 
-- **The dynamic loader.** Running `ld.so <binary>` maps a program the loader can read, rather
-  than `execve`-ing it. If a binary is readable but not granted execute, it may still be
-  runnable this way. Phase 3 measures whether this holds on the target kernels; the result is
-  documented here and in the escape matrix, and may be a known limitation rather than a
-  blocked case.
+- **Execute grants do not limit code the tool can read (measured: `exec-via-loader-001`
+  escapes).** The kernel checks Landlock's execute right when it starts a program, including
+  the dynamic loader of every dynamically linked binary. So the loader must be granted
+  execute for anything to run. Running `ld.so <binary>` then maps a program the tool can
+  only *read*, and Landlock never checks memory mapped as executable. The same holds for an
+  interpreter loading a readable script or shared library, and for code the tool writes into
+  memory. Execute grants decide which programs the kernel will start directly; they are not
+  a boundary against running code the tool can read. Everything that runs this way still
+  runs inside the same sandbox, so it gains no access the tool did not already have. Grant
+  read narrowly if a readable binary would be dangerous to run.
+- **A supervisor killed with `SIGKILL`.** The tool's first process dies with it
+  (`PR_SET_PDEATHSIG`). Processes the tool started are re-parented to the next subreaper or
+  to init, and keep running inside the sandbox until they exit. Stopping the supervisor any
+  other way (Ctrl-C, `SIGTERM`, `SIGHUP`) kills everything.
 - **`RLIMIT_NPROC` is per user, not per sandbox.** The process limit counts every process the
   user owns. Convergence sets it relative to the count at launch, but a fork bomb's
   containment also leans on the wall-clock deadline and the process-group kill, not on the

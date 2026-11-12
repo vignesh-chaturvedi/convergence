@@ -9,16 +9,45 @@ It is the companion to [Divergence](https://github.com/vignesh-chaturvedi/diverg
 Divergence reports the gap between what an MCP server declares and what it actually does.
 Convergence contains what it does.
 
-## Status: pre-alpha, nothing is enforced yet
+## Status: pre-alpha
 
-This repository is being built in phases; see [PLAN.md](PLAN.md). The current code can
-report what a kernel supports (`convergence doctor`) and check policies (`validate`,
-`explain`), but **it does not sandbox anything.** Do
-not use it to run untrusted code.
+This repository is being built in phases; see [PLAN.md](PLAN.md). `convergence run`
+enforces policies, but nothing here has been independently audited yet. Do not rely on it as
+your only protection for untrusted code.
 
-This README will only claim what the tests and benchmarks in this repository support. The
-sections on what is enforced, the escape matrix, and the benchmarks will be added as the
-phases that produce that evidence land.
+This README only claims what the tests and the escape matrix in this repository support.
+Benchmarks will be added as the phases that produce them land.
+
+## Run a tool under a policy: `convergence run`
+
+```bash
+convergence run --policy policy.yaml -- python3 tool.py --input data.json
+```
+
+The tool runs with:
+- **Landlock** limiting it to the policy's files and TCP/UDP ports;
+- **seccomp-bpf** denying escape-prone system calls, and socket families and protocols the
+  policy does not grant;
+- **`no_new_privs`** and resource limits;
+- an environment built only from the policy, and no inherited descriptors beyond stdio.
+
+Everything it starts is killed when its first process exits, or at the policy's wall-clock
+limit. Convergence refuses a policy the running kernel cannot fully enforce, unless you pass
+`--allow-degraded`, and then it lists exactly what is degraded. Each run is recorded as JSON
+under `~/.local/state/convergence/runs/`, or printed with `--json`. The spawn model is in
+[ADR 0006](docs/adr/0006-spawn-model.md).
+
+On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), the escape matrix gives these
+results ([report](escape/results/README.md)):
+
+| | Result |
+|---|---|
+| Development attacks blocked | 53 of the 55 that can be tested there |
+| Benign control workloads | all 10 run, with no false denials |
+| Escapes | 1, running a readable program through the dynamic loader: a known limitation, see [THREAT_MODEL.md](THREAT_MODEL.md) |
+| Needs a newer kernel | 1, signal scoping (Landlock ABI 6) |
+
+The sealed holdout, which was written independently of the runtime, has not been run yet.
 
 ## What works today: `convergence doctor`
 
@@ -45,12 +74,12 @@ A policy lists what a tool may do. Everything else is denied
 
 ```bash
 convergence validate policy.yaml          # schema, paths, syscall names, risky grants
-convergence explain --policy policy.yaml  # how each rule would be enforced on this kernel
+convergence explain --policy policy.yaml  # how each rule is enforced on this kernel
 ```
 
 `explain` reports every rule as `enforced`, `enforced-with-caveat`, `partial`, or
-`unenforceable` on the running kernel. Convergence will refuse to run a policy with a
-`partial` or `unenforceable` rule unless told explicitly. For example, on stock Ubuntu 24.04
+`unenforceable` on the running kernel. `run` refuses a policy with a `partial` or
+`unenforceable` rule unless told explicitly. For example, on stock Ubuntu 24.04
 (Landlock ABI 4), limiting UDP to port 53 is `unenforceable`: that needs ABI 10.
 
 Landlock filters network access by **port, not host**. Allowlisting hosts or IP addresses is

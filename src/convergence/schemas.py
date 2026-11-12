@@ -22,6 +22,8 @@ from convergence.policy.model import SCHEMA as POLICY_SCHEMA
 from convergence.policy.model import Policy
 from convergence.probe.report import SCHEMA as DOCTOR_SCHEMA
 from convergence.probe.report import DoctorReport
+from convergence.runtime.record import SCHEMA as RUN_SCHEMA
+from convergence.runtime.record import RunRecord
 
 BASE_URL = "https://github.com/vignesh-chaturvedi/convergence/blob/main/schemas"
 
@@ -50,9 +52,23 @@ def doctor_schema() -> dict[str, Any]:
     }
 
 
+def run_schema() -> dict[str, Any]:
+    schema = TypeAdapter(RunRecord).json_schema(mode="serialization")
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": f"{BASE_URL}/run-v1.json",
+        "title": RUN_SCHEMA,
+        "description": (
+            "A run record, saved by `convergence run` and printed by `convergence run --json`."
+        ),
+        **{k: v for k, v in schema.items() if k not in ("title", "description")},
+    }
+
+
 SCHEMAS: dict[str, Callable[[], dict[str, Any]]] = {
     "policy-v1.json": policy_schema,
     "doctor-v1.json": doctor_schema,
+    "run-v1.json": run_schema,
 }
 
 

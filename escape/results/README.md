@@ -9,7 +9,7 @@ Markdown file is generated from its JSON.
 |---|---|---|
 | `validity-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | 45 of the 47 development attacks escape with nothing confining them, and all 10 controls do their job. The other 2 attacks are `not-testable`: this host refuses raw sockets and TIOCSTI before Convergence is involved. This is the validity gate: a case that fails it proves nothing. |
 | `validity-holdout-lima-ubuntu-24.04-ga-aarch64.*` | unconfined | All 26 independently authored holdout attacks escape with nothing confining them. Its cases are sealed by `escape/cases/holdout.sha256`. |
-| `baseline-convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The "initially red" baseline: `convergence run` does not exist yet (Phase 4), so every testable case is `launcher-unavailable` and the run exits non-zero. Nothing is counted as a pass. |
+| `convergence-lima-ubuntu-24.04-ga-aarch64.*` | convergence | The development attacks and controls under `convergence run`: 53 attacks pass, 1 escape (`exec-via-loader-001`, the dynamic-loader limitation in THREAT_MODEL.md), 1 documented limitation (`signal-outside-001`, needs Landlock ABI 6), 2 not testable. All 10 controls pass. Escape rate 1/44, false-denial rate 0/10. |
 
 All three were generated on the Lima VM: Ubuntu 24.04.4, stock kernel 6.8.0-134-generic,
 aarch64, Landlock ABI 4. Their `commit` field ends in `+uncommitted` because they were
@@ -22,6 +22,10 @@ they read `/proc/<pid>/cmdline` with `/proc` granted, which the threat model lea
 scope; the final run is 26 of 26 valid. None of them ran Convergence.
 
 ## Superseded
+
+`superseded/baseline-convergence-*` is the "initially red" baseline committed at the end of
+Phase 3: `convergence run` did not exist yet, so every testable case was
+`launcher-unavailable` and nothing was counted as a pass.
 
 `superseded/validity-first-corpus-*` were produced on an Ubuntu 24.04.5 host (kernel 7.0,
 x86_64, Landlock ABI 8) from the first version of the attack corpus. They are kept as a
@@ -42,6 +46,6 @@ The one-line record of that holdout run is in `escape/holdout-runs.jsonl`.
 python -m escape.runner validity --set dev --set controls \
   --json escape/results/validity-<env>.json --markdown escape/results/validity-<env>.md
 python -m escape.runner run --launcher convergence --set dev --set controls \
-  --json escape/results/baseline-convergence-<env>.json \
-  --markdown escape/results/baseline-convergence-<env>.md
+  --json escape/results/convergence-<env>.json \
+  --markdown escape/results/convergence-<env>.md
 ```

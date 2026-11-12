@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 3 done (exit gate met); Phase 4 next · **Last updated:** 2026-11-12
+**Status:** Phase 4 in progress: `convergence run` built; denial capture and the holdout run pending · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -477,6 +477,24 @@ the baseline report is committed.
   are. Fixes made afterwards are listed separately and never overwrite the original holdout
   result.
 
+**Progress (Phase 4):**
+- **`convergence run` built (2026-11-12)**, as specified above and in ADR 0006, with one
+  change of plan: seccomp is two stacked filters, because libseccomp 2.5 rejects both a rule
+  that compares one argument twice and two rules with different actions for one syscall.
+  A baseline filter lists only denials, and allow-list mode adds a deny-by-default filter on
+  top.
+- **Escape matrix under `run`, stock Ubuntu 24.04 (ABI 4):** 53 of 55 testable development
+  attacks pass. The one escape, `exec-via-loader-001`, is inherent: the loader must be
+  executable for any dynamic binary, and Landlock does not check executable mappings. It is
+  documented in THREAT_MODEL.md. The documented limitation, `signal-outside-001`, needs
+  ABI 6. All 10 controls pass.
+- **Corrected along the way:** the harness counted the supervisor as the tool in
+  per-process measurements. Two dev cases signalled `${REACHED}` after the step their
+  mechanism stops, one lacked a grant its setup needed, and one control's policy missed
+  `/bin/sh`.
+- **Pending:** denial capture (ADR 0007); the CI escape job turned required, with documented
+  limitations recorded so that they do not fail it; then the one holdout run.
+
 **Exit gate:** dev escape rate is 0% or every exception is documented; the controls pass
 under hand-written policies; the holdout result is published; the CI escape job is made
 required.
@@ -625,7 +643,7 @@ from the results.
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | done | see git log | |
-| 4 | Runtime enforcement and holdout | not started | | |
+| 4 | Runtime enforcement and holdout | in progress: `run` done; denial capture and holdout run pending | | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |
 | 7 | Benchmarks | not started | | |

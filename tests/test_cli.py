@@ -28,7 +28,7 @@ def test_no_arguments_prints_help_and_states_status(capsys: pytest.CaptureFixtur
     out = capsys.readouterr().out
     assert "usage: convergence" in out
     # argparse wraps the description to the terminal width, so compare word sequences.
-    assert "no enforcement is implemented yet" in " ".join(out.split())
+    assert "Landlock, seccomp, and resource limits. Pre-alpha." in " ".join(out.split())
 
 
 def test_module_entry_point_runs() -> None:

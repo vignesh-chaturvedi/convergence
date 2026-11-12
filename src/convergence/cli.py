@@ -5,6 +5,9 @@ so instead of pretending to do anything.
 
 Exit codes: 0 success; 1 the check failed (invalid policy, minimum enforcement set missing);
 2 usage error or not implemented yet; 3 ``explain``: some rules are not fully enforceable.
+``run`` exits with the tool's own status, or 128+N if a signal N ended it, 124 if the
+wall-clock limit was reached, 125 if the tool was not started, 126 if it could not be
+executed, and 127 if it was not found.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from convergence import __version__
 
@@ -73,12 +77,94 @@ def _explain(args: argparse.Namespace) -> int:
     return EXIT_OK if assessment.would_run else EXIT_NOT_ENFORCEABLE
 
 
+def _say(message: str) -> None:
+    sys.stderr.write(f"convergence: {message}\n")
+
+
+def _run(args: argparse.Namespace) -> int:
+    from convergence.policy.load import PolicyError, load_policy
+    from convergence.runtime import record as run_record
+    from convergence.runtime.plan import EXIT_NOT_STARTED, Plan, RunError, prepare
+    from convergence.runtime.supervisor import Options, not_started_record, supervise
+
+    command = list(args.command)
+    if command[:1] == ["--"]:
+        command = command[1:]
+    policy_path = Path(args.policy)
+    try:
+        policy_text = policy_path.read_bytes()
+    except OSError as exc:
+        _say(f"{args.policy}: {exc.strerror}")
+        return EXIT_NOT_STARTED
+    options = Options(
+        timeout=args.timeout,
+        capture_only=args.json,
+        keep=args.max_output,
+        policy_path=str(policy_path.resolve()),
+        policy_text=policy_text,
+    )
+
+    plan: Plan | None = None
+    try:
+        try:
+            policy = load_policy(policy_path)
+        except PolicyError as exc:
+            raise RunError(
+                f"{exc.source}: invalid policy", EXIT_NOT_STARTED, [str(i) for i in exc.issues]
+            ) from exc
+        options.policy_name = policy.name
+        plan = prepare(policy, command, allow_degraded=args.allow_degraded)
+        for rule in plan.degraded:
+            _say(
+                f"degraded ({rule.status.value}): {rule.id} {rule.rule}"
+                + (f": {rule.detail}" if rule.detail else "")
+            )
+        record = supervise(plan, policy.resources.wall_clock_seconds, options)
+    except RunError as exc:
+        _say(str(exc))
+        for detail in exc.details:
+            sys.stderr.write(f"  {detail}\n")
+        record = not_started_record(command, options, exc)
+    finally:
+        if plan is not None:
+            plan.close()
+            plan.remove_scratch()
+
+    outcome = record.outcome
+    if outcome.status == "timed-out":
+        _say(f"stopped the tool at the wall-clock limit ({record.duration_seconds:.1f} s)")
+    if outcome.descendants_killed:
+        _say(f"killed {outcome.descendants_killed} process(es) the tool left running")
+    if not args.no_record:
+        try:
+            run_record.save(record)
+        except OSError as exc:
+            _say(f"could not save the run record: {exc}")
+    if args.json:
+        sys.stdout.write(record.to_json() + "\n")
+    return outcome.convergence_exit_code
+
+
+def _positive_float(text: str) -> float:
+    value = float(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return value
+
+
+def _byte_count(text: str) -> int:
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError("must not be negative")
+    return value
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="convergence",
         description=(
-            "Least-privilege sandboxing for AI agent tools on Linux. "
-            "Pre-alpha: no enforcement is implemented yet."
+            "Least-privilege sandboxing for AI agent tools on Linux, with Landlock, "
+            "seccomp, and resource limits. Pre-alpha."
         ),
     )
     parser.add_argument("--version", action="version", version=f"convergence {__version__}")
@@ -132,6 +218,49 @@ def build_parser() -> argparse.ArgumentParser:
     explain.add_argument("--cwd", help="directory ${CWD} stands for (default: current directory)")
     explain.add_argument("--json", action="store_true", help="print the assessment as JSON")
     explain.set_defaults(handler=_explain)
+
+    run = commands.add_parser(
+        "run",
+        help="run a command under a policy",
+        description=(
+            "Run COMMAND with the policy applied: Landlock for files and TCP/UDP ports, "
+            "seccomp for system calls, no_new_privs, and resource limits. The tool gets only "
+            "the environment the policy builds and no inherited descriptors beyond stdio. "
+            "Refuses a policy this kernel cannot fully enforce unless --allow-degraded is "
+            "given. Everything the tool starts is killed when its first process exits."
+        ),
+        epilog=(
+            "Exit status: the tool's own, or 128+N if signal N ended it; 124 wall-clock limit; "
+            "125 not started; 126 could not execute; 127 not found."
+        ),
+    )
+    run.add_argument("--policy", required=True, help="policy file (YAML or JSON)")
+    run.add_argument(
+        "--allow-degraded",
+        action="store_true",
+        help="run even if some rules cannot be fully enforced here (they are listed)",
+    )
+    run.add_argument(
+        "--timeout",
+        type=_positive_float,
+        metavar="S",
+        help="stop after S seconds (never later than the policy's wall_clock_seconds)",
+    )
+    run.add_argument(
+        "--json",
+        action="store_true",
+        help="capture the tool's output and print the run record as JSON instead",
+    )
+    run.add_argument(
+        "--max-output",
+        type=_byte_count,
+        default=1024 * 1024,
+        metavar="BYTES",
+        help="bytes of each output stream kept in the run record (default: 1 MiB)",
+    )
+    run.add_argument("--no-record", action="store_true", help="do not save the run record")
+    run.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
+    run.set_defaults(handler=_run)
     return parser
 
 

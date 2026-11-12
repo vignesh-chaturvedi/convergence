@@ -79,6 +79,39 @@ class Capabilities:
         )
 
     @classmethod
+    def from_kernel(cls) -> Capabilities:
+        """What the running kernel reports, without live probes (fast enough for every run).
+
+        Features are ``abi-only``: the kernel's Landlock ABI includes them. ``run`` proves
+        them by applying them, and fails closed if the kernel rejects one.
+        """
+        from convergence.kernel import landlock as ll
+        from convergence.kernel import seccomp as sc
+        from convergence.kernel._libc import PR_GET_SECCOMP, prctl
+        from convergence.probe.report import PROTECTIONS
+
+        try:
+            abi: int | None = ll.abi_version()
+        except ll.LandlockUnavailable:
+            abi = None
+        try:
+            sc.library()
+            prctl(PR_GET_SECCOMP)
+            seccomp = True
+        except (sc.SeccompUnavailable, OSError):
+            seccomp = False
+        available = {"seccomp_filter": seccomp, "no_new_privs": True, "rlimits": True}
+        features: dict[str, Proof] = {}
+        for spec in PROTECTIONS:
+            if spec.min_abi is not None:
+                present = abi is not None and abi >= spec.min_abi
+            else:
+                present = available.get(spec.id, False)
+            if present:
+                features[spec.id] = Proof.ABI_ONLY
+        return cls("the running kernel (Landlock ABI and seccomp support)", abi, features)
+
+    @classmethod
     def assumed(cls, abi: int) -> Capabilities:
         """Capabilities of a hypothetical kernel at ``abi``. Nothing is verified."""
         from convergence.probe.report import PROTECTIONS
@@ -523,7 +556,7 @@ def assess(policy: Policy, paths: list[ResolvedPath], caps: Capabilities) -> Ass
         source="",
         capabilities=caps.source,
         landlock_abi=caps.landlock_abi,
-        runtime_implemented=False,
+        runtime_implemented=True,
         baseline=info_baseline,
         rules=rules,
     )
@@ -535,8 +568,7 @@ def render_text(assessment: Assessment) -> str:
         f"{assessment.source}",
         f"  capabilities: {assessment.capabilities}"
         + (f"; Landlock ABI {abi}" if abi is not None else "; no Landlock"),
-        "  Pre-alpha: `convergence run` is not implemented yet. This shows how each rule would",
-        "  be enforced on this kernel.",
+        "  How `convergence run` enforces each rule on this kernel:",
         "",
     ]
     width = max((len(s.value) for s in Status), default=10)

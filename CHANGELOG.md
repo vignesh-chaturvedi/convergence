@@ -8,6 +8,33 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `convergence run --policy P -- COMMAND`: runs a command under a policy with Landlock
+  (files, TCP/UDP ports, signal and abstract-socket scoping), a seccomp filter, `no_new_privs`,
+  and rlimits. The tool gets an environment built only from the policy and no inherited
+  descriptors beyond stdio. A policy the kernel cannot fully enforce is refused unless
+  `--allow-degraded` is given; the degraded rules are then listed. Options: `--timeout`,
+  `--json`, `--max-output`, `--no-record`. Exit status: the tool's own, 128+N for a signal,
+  124 for the wall clock, 125 not started, 126 cannot execute, 127 not found.
+- Supervision: the supervisor is a child subreaper. When the tool's first process exits, at
+  the wall clock, or when the supervisor is stopped, it kills the process group and every
+  remaining descendant, including daemons that left the session. The tool dies with a killed
+  supervisor (`PR_SET_PDEATHSIG`). Core dumps are disabled.
+- Run records (`convergence.run/1`, `schemas/run-v1.json`), saved privately under
+  `$XDG_STATE_HOME/convergence/runs/`.
+- ADR 0006: the spawn model. The ruleset and seccomp programs are built in the parent, and
+  the child applies them in a fixed order. Its last steps (rlimits, seccomp, `execve`) use
+  only prebuilt objects, because a small `RLIMIT_DATA` would make any allocation fail.
+- The seccomp filter is two filters, because libseccomp cannot express "allow except these
+  argument values" in one. A baseline filter lists only denials: syscalls, namespace flags
+  on `clone`, `TIOCSTI`/`TIOCLINUX`, the seccomp listener flag, `personality` flags that
+  disable address-space randomisation, and every socket family, type, or protocol the policy
+  does not grant. Allow-list mode adds a second, deny-by-default filter. Arguments the kernel
+  reads as 32-bit values are compared so that high bits cannot slip past a rule.
+- Escape matrix under `convergence run` on the stock Ubuntu 24.04 kernel: 53 development
+  attacks pass, 1 escape (the dynamic-loader limitation, now documented in
+  THREAT_MODEL.md), 1 documented limitation (signal scoping needs Landlock ABI 6), and all
+  10 controls pass.
+
 - Development attack corpus: 47 distinct cases generated from one explicit table by
   `escape/build_cases.py`. The generator writes development cases only, refuses duplicates,
   never touches files it did not create, and a test fails if a generated file is edited by
@@ -33,6 +60,13 @@ All notable changes to this project are recorded here. The format follows
 
 ### Fixed
 
+- Escape harness: per-process measurements (memory, CPU, descriptors) no longer include the
+  launcher's own process. Under Convergence that process is the supervisor, which would have
+  counted as the tool.
+- Development cases `net-udp-001` and `unix-socket-host-001` now signal `${REACHED}` before
+  creating the socket, which is the step their mechanism stops. `setuid-no-new-privs-001`
+  now grants the pseudo-terminal its setup needs. The `control-tar-gzip` policy grants
+  `/bin/sh`, which GNU tar uses to start the compressor.
 - `exec-probe`'s marker failed on Ubuntu 26.04, whose Rust uutils `sleep` is a multi-call
   binary that picks its tool from its own name: copied as `marker`, it exited at once and was
   never sampled. The copy is now named `sleep` and checked during setup. The escape job now

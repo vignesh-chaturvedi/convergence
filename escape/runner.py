@@ -226,10 +226,15 @@ class Runner:
                 os.killpg(running.pid, 9)
             output = running.output()
 
+            # A launcher that adds its own process (Convergence's supervisor) is the root;
+            # per-process measurements are about the tool, so the root is left out of them.
+            peaks = sampler.peaks()
+            if self.launcher.overhead_processes:
+                peaks = [p for p in peaks if p.pid != running.pid]
             evidence = Evidence(
                 exit=exit_info,
                 output=output,
-                peaks=sampler.peaks(),
+                peaks=peaks,
                 max_concurrent=sampler.max_concurrent,
                 survivors=survivors,
                 overhead_processes=self.launcher.overhead_processes,

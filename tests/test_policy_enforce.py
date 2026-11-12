@@ -191,7 +191,7 @@ def test_json_lists_the_blocking_rules(tmp_path: Path) -> None:
     result = assess("version: 1\nnetwork:\n  udp_send: [53]\n", 4, tmp_path)
     data = json.loads(result.to_json())
     assert data["schema"] == "convergence.enforceability/1"
-    assert data["runtime_implemented"] is False
+    assert data["runtime_implemented"] is True
     assert data["would_run_without_allow_degraded"] is False
     assert data["blocking_rules"] == ["network.udp_send", "network.udp_bind"]
 
@@ -199,7 +199,7 @@ def test_json_lists_the_blocking_rules(tmp_path: Path) -> None:
 def test_text_says_run_would_refuse(tmp_path: Path) -> None:
     text = enforce.render_text(assess("version: 1\nnetwork:\n  udp_send: [53]\n", 4, tmp_path))
     assert "--allow-degraded" in text
-    assert "not implemented yet" in text
+    assert "How `convergence run` enforces" in text
 
 
 @pytest.mark.parametrize("abi", ALL_ABIS)

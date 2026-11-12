@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from escape import runner
-from escape.launchers import ConvergenceLauncher, UnconfinedLauncher
+from escape.launchers import LAUNCHERS, ConvergenceLauncher, UnconfinedLauncher
 from escape.preconditions import Availability
 from escape.report import CaseResult
 from escape.schema import load_case
@@ -33,13 +33,19 @@ def test_every_control_is_valid_unconfined(name: str) -> None:
     assert run_control(name) is Result.VALID
 
 
-def test_convergence_launcher_is_never_a_silent_pass() -> None:
+class _UnavailableConvergence(ConvergenceLauncher):
+    def unavailable_reason(self) -> str | None:
+        return "`convergence run` is not installed here; nothing was executed"
+
+
+def test_an_unavailable_launcher_is_never_a_silent_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     path = CONTROLS / "c01-python-read-write.yaml"
-    item = runner.Runner(ConvergenceLauncher(), subreaper=False).run_case(
+    item = runner.Runner(_UnavailableConvergence(), subreaper=False).run_case(
         path, load_case(path), "controls"
     )
     assert item.result is Result.LAUNCHER_UNAVAILABLE
-    assert "not implemented yet" in item.evidence
+    assert "nothing was executed" in item.evidence
+    monkeypatch.setitem(LAUNCHERS, "convergence", _UnavailableConvergence)
     code = runner.main(
         [
             "run",
@@ -53,6 +59,14 @@ def test_convergence_launcher_is_never_a_silent_pass() -> None:
         ]
     )
     assert code == 1
+
+
+def test_a_control_passes_under_convergence() -> None:
+    path = CONTROLS / "c01-python-read-write.yaml"
+    item = runner.Runner(ConvergenceLauncher(), subreaper=False).run_case(
+        path, load_case(path), "controls"
+    )
+    assert item.result is Result.PASS, item.evidence
 
 
 def test_validity_command_writes_reports(tmp_path: Path) -> None:

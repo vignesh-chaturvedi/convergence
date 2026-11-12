@@ -140,8 +140,15 @@ Argument checks on syscalls that otherwise stay allowed:
 - `clone` is denied when its flags create a namespace;
 - `seccomp` is denied when it would install a user-notification listener;
 - `ioctl` `TIOCSTI` and `TIOCLINUX` (terminal input injection) are denied;
-- `personality` is limited to queries and the values Docker's default profile allows;
-- `socket` is limited to the families and types the network policy grants.
+- `personality` cannot set flags that disable address-space randomisation or make memory
+  executable (`ADDR_NO_RANDOMIZE`, `READ_IMPLIES_EXEC`, `MMAP_PAGE_ZERO`,
+  `ADDR_COMPAT_LAYOUT`);
+- `socket` is limited to the families, types, and protocols the network policy grants (no
+  SCTP, MPTCP, UDP-Lite, or ICMP sockets, which Landlock's port rules would not cover).
+
+In `allow-list` mode, `execve`, `exit`, and `exit_group` are always allowed: without them
+the tool could not be started or exit. `clone3` fails with `ENOSYS` unless it is allowed, so
+the C library falls back to `clone`, whose namespace flags are checked.
 
 ## `resources`
 
@@ -206,6 +213,39 @@ no policy rule asks for them. Two of them are worth knowing:
   `include/uapi/linux/landlock.h`). A sandboxed tool can see whether files exist outside its
   grants, and can change the permissions and timestamps of files you own. It still cannot
   read or change their contents. Convergence does not mitigate this yet.
+
+## Running a tool: `convergence run`
+
+```bash
+convergence run --policy p.yaml -- COMMAND [ARGS...]
+convergence run --policy p.yaml --json -- COMMAND      # print the run record instead of the output
+convergence run --policy p.yaml --timeout 30 -- COMMAND
+```
+
+- `${HOME}`, `${CWD}`, and `${SCRATCH}` are expanded in `COMMAND`'s arguments and in
+  `environment.set` values, as in paths. `${CWD}` is the directory `run` is started in, and
+  the tool runs there.
+- `COMMAND` is looked up in the policy's `PATH` (or the default `PATH` if the policy sets
+  none). To start, the program, its `#!` interpreter, and its dynamic loader (for example
+  `/lib64/ld-linux-x86-64.so.2`, or a directory containing it) must all be granted
+  `execute`.
+- The run ends when the tool's first process exits. Anything it started is then killed,
+  even a daemon that left the session. The run also ends at `wall_clock_seconds` or
+  `--timeout`, whichever is sooner.
+- The tool's stdout and stderr are passed through. Its stdin is `run`'s stdin. Core dumps
+  are disabled.
+- Each run is saved as a `convergence.run/1` record
+  ([schema](../schemas/run-v1.json)) under `$XDG_STATE_HOME/convergence/runs/`
+  (`~/.local/state` when unset). `--no-record` skips it.
+
+| Exit status | Meaning |
+|---|---|
+| the tool's | the tool exited by itself |
+| 128 + N | signal N ended the tool, or stopped `run` |
+| 124 | the wall-clock limit was reached |
+| 125 | the tool was not started: invalid policy, a rule this kernel cannot enforce (without `--allow-degraded`), or a setup failure |
+| 126 | the program could not be executed, often because it, its interpreter, or its loader is not granted `execute` |
+| 127 | the program was not found |
 
 ## `validate`
 

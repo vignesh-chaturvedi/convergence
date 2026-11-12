@@ -367,8 +367,8 @@ def render_text(report: DoctorReport) -> str:
     host = report.host
     lines = [f"convergence doctor ({report.convergence_version})", ""]
     lines += _wrap(
-        "Pre-alpha: Convergence does not enforce policies yet. This report shows what this "
-        "machine's kernel supports, proven by live tests in throwaway child processes.",
+        "This report shows what this machine's kernel supports, proven by live tests in "
+        "throwaway child processes. `convergence run` enforces policies with what is found here.",
         0,
     )
 

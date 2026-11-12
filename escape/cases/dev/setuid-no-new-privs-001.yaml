@@ -17,7 +17,9 @@
       ],
       "write": [
         "${OUT_DIR}",
-        "/dev/null"
+        "/dev/null",
+        "/dev/ptmx",
+        "/dev/pts"
       ],
       "execute": [
         "${PYTHON}",

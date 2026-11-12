@@ -7,7 +7,7 @@ def reached():
 
 
 import socket
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 reached()
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect('${SINK_PATH}')
 s.sendall(b'probe')

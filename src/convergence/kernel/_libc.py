@@ -7,6 +7,8 @@ import os
 from functools import cache
 
 # prctl(2) options, from include/uapi/linux/prctl.h.
+PR_SET_PDEATHSIG = 1
+PR_SET_CHILD_SUBREAPER = 36
 PR_GET_SECCOMP = 21
 PR_SET_SECCOMP = 22
 PR_SET_NO_NEW_PRIVS = 38
@@ -14,6 +16,11 @@ PR_GET_NO_NEW_PRIVS = 39
 
 # include/uapi/linux/seccomp.h
 SECCOMP_MODE_FILTER = 2
+
+# close_range(2): the same number on x86_64 and arm64 (generic table); the flag is from
+# include/uapi/linux/close_range.h.
+SYS_CLOSE_RANGE = 436
+CLOSE_RANGE_CLOEXEC = 1 << 2
 
 
 @cache

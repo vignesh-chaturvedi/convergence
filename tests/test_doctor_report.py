@@ -174,7 +174,7 @@ def test_report_states_that_nothing_is_enforced_yet() -> None:
     doctor = build(4)
     assert doctor.enforcement_implemented is False
     text = report.render_text(doctor)
-    assert "does not enforce policies yet" in " ".join(text.split())
+    assert "proven by live tests" in " ".join(text.split())
 
 
 def test_json_round_trips_with_schema() -> None:

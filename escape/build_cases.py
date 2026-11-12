@@ -397,7 +397,8 @@ if proc.poll() is None:
     proc.kill()
 """,
         {"type": "privilege-gain"},
-        policy={"filesystem": {"execute": ["/usr/bin/passwd"]}},
+        # The pseudo-terminal is setup, not the attempt, so its devices are granted.
+        policy={"filesystem": {"write": ["/dev/ptmx", "/dev/pts"], "execute": ["/usr/bin/passwd"]}},
         requires=("setuid-executable",),
     ),
     # --- network -------------------------------------------------------------------------
@@ -437,8 +438,9 @@ c.sendall(b'HTTP/1.0 200 OK\\r\\n\\r\\n${SERVE_NONCE}')
     Variant(
         "net-udp",
         "Sends a UDP datagram although the policy grants no UDP at all.",
-        "import socket\ns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n"
-        "reached()\ns.sendto(b'probe', ('${SINK_HOST}', int('${SINK_PORT}')))\n",
+        # Creating the socket is the attempt: seccomp denies UDP sockets when no UDP is granted.
+        "import socket\nreached()\ns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)\n"
+        "s.sendto(b'probe', ('${SINK_HOST}', int('${SINK_PORT}')))\n",
         {"type": "network-sink", "protocol": "udp"},
     ),
     Variant(
@@ -457,8 +459,9 @@ s.sendto(packet, ('${SINK_HOST}', port))
     Variant(
         "unix-socket-host",
         "Connects to a pathname unix socket outside the sandbox, standing in for a host service.",
-        "import socket\ns = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
-        "reached()\ns.connect('${SINK_PATH}')\ns.sendall(b'probe')\n",
+        # Creating the socket is part of the attempt: below Landlock ABI 9, seccomp denies it.
+        "import socket\nreached()\ns = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)\n"
+        "s.connect('${SINK_PATH}')\ns.sendall(b'probe')\n",
         {"type": "network-sink", "family": "unix", "protocol": "stream"},
     ),
     # --- syscall filter ------------------------------------------------------------------

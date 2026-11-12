@@ -1,0 +1,288 @@
+{
+  "$defs": {
+    "KernelInfo": {
+      "properties": {
+        "landlock_abi": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Landlock Abi"
+        },
+        "machine": {
+          "title": "Machine",
+          "type": "string"
+        },
+        "release": {
+          "title": "Release",
+          "type": "string"
+        }
+      },
+      "required": [
+        "release",
+        "machine",
+        "landlock_abi"
+      ],
+      "title": "KernelInfo",
+      "type": "object"
+    },
+    "Outcome": {
+      "properties": {
+        "convergence_exit_code": {
+          "title": "Convergence Exit Code",
+          "type": "integer"
+        },
+        "descendants_killed": {
+          "default": 0,
+          "title": "Descendants Killed",
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Code"
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signal"
+        },
+        "status": {
+          "enum": [
+            "exited",
+            "signaled",
+            "timed-out",
+            "interrupted",
+            "not-started"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "convergence_exit_code"
+      ],
+      "title": "Outcome",
+      "type": "object"
+    },
+    "PolicyRef": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "name"
+      ],
+      "title": "PolicyRef",
+      "type": "object"
+    },
+    "StreamRecord": {
+      "properties": {
+        "kept": {
+          "default": "",
+          "title": "Kept",
+          "type": "string"
+        },
+        "passed_through": {
+          "default": false,
+          "title": "Passed Through",
+          "type": "boolean"
+        },
+        "total_bytes": {
+          "default": 0,
+          "title": "Total Bytes",
+          "type": "integer"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "title": "StreamRecord",
+      "type": "object"
+    },
+    "Usage": {
+      "description": "Resource use of every process of the run (RUSAGE_CHILDREN of the supervisor).",
+      "properties": {
+        "max_rss_kb": {
+          "title": "Max Rss Kb",
+          "type": "integer"
+        },
+        "system_cpu_seconds": {
+          "title": "System Cpu Seconds",
+          "type": "number"
+        },
+        "user_cpu_seconds": {
+          "title": "User Cpu Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "user_cpu_seconds",
+        "system_cpu_seconds",
+        "max_rss_kb"
+      ],
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/vignesh-chaturvedi/convergence/blob/main/schemas/run-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A run record, saved by `convergence run` and printed by `convergence run --json`.",
+  "properties": {
+    "command": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Command",
+      "type": "array"
+    },
+    "convergence_version": {
+      "title": "Convergence Version",
+      "type": "string"
+    },
+    "cwd": {
+      "title": "Cwd",
+      "type": "string"
+    },
+    "degraded": {
+      "items": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "title": "Degraded",
+      "type": "array"
+    },
+    "duration_seconds": {
+      "default": 0.0,
+      "title": "Duration Seconds",
+      "type": "number"
+    },
+    "ended_at": {
+      "default": "",
+      "title": "Ended At",
+      "type": "string"
+    },
+    "enforcement": {
+      "additionalProperties": true,
+      "title": "Enforcement",
+      "type": "object"
+    },
+    "executable": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Executable"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kernel": {
+      "$ref": "#/$defs/KernelInfo"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyRef"
+    },
+    "schema": {
+      "default": "convergence.run/1",
+      "title": "Schema",
+      "type": "string"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "stderr": {
+      "$ref": "#/$defs/StreamRecord"
+    },
+    "stdout": {
+      "$ref": "#/$defs/StreamRecord"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "convergence_version",
+    "started_at",
+    "command",
+    "cwd",
+    "policy",
+    "kernel",
+    "outcome"
+  ],
+  "title": "convergence.run/1",
+  "type": "object"
+}

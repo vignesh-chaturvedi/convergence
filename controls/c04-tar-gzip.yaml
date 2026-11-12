@@ -7,7 +7,8 @@ policy:
   filesystem:
     read: [/usr, /etc/ld.so.cache, "${WORKDIR}"]
     write: ["${OUT_DIR}", /dev/null]
-    execute: [/usr/bin/tar, /usr/bin/gzip, {path: "${LOADER}", optional: true}]
+    # GNU tar starts the compressor through /bin/sh -c, so the shell is needed too.
+    execute: [/usr/bin/tar, /usr/bin/gzip, /bin/sh, {path: "${LOADER}", optional: true}]
   resources: {wall_clock_seconds: 30}
   environment:
     set: {PATH: /usr/bin:/bin, LANG: C.UTF-8}

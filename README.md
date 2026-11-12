@@ -97,10 +97,12 @@ n/a: bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not p
 - **What the rows include.** Each Docker row includes `sudo` (its own row), and the cold CLI
   row includes starting Python. A warm call, through the library API or MCP, costs a fork
   and the sandbox setup.
-- **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04 at all. AppArmor restricts
-  the user namespaces it needs; Convergence uses none.
+- **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04 at all, neither on the VM
+  nor on GitHub's runner. AppArmor restricts the user namespaces it needs; Convergence uses
+  none.
 - Method: [ADR 0011](docs/adr/0011-benchmark-method.md). All results, including a
-  GitHub-hosted x86_64 runner (noisy): [benchmarks/](benchmarks/README.md).
+  GitHub-hosted x86_64 runner (noisy, about 2x slower for warm calls):
+  [benchmarks/](benchmarks/README.md).
 
 ## Generate a policy from what a tool does: `observe` and `generate`
 

@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 7 in progress: VM results done; CI x86_64 run pending · **Last updated:** 2026-11-12
+**Status:** Phase 7 done (exit gate met); Phase 8 next · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -679,8 +679,22 @@ the importer passes on real Divergence output.
   | `docker run`, cold | 151 ms |
 
   The README table is generated from that JSON, and a test fails if they drift.
-- **Pending:** the GitHub-hosted x86_64 run (manual `benchmarks` workflow), committed and
-  labelled noisy.
+- **CI x86_64 results** (`results/gha-ubuntu-24.04-x86_64.*`, run 43213493643, labelled
+  noisy): AMD EPYC, kernel 7.0. `/usr/bin/true` p50:
+
+  | Configuration | p50 |
+  |---|---|
+  | no sandbox | 0.41 ms |
+  | Convergence, warm library API | 15 ms |
+  | Convergence, MCP | 17 ms |
+  | Convergence CLI, cold | 138 ms |
+  | `docker run`, warm | 110 ms |
+  | `docker run`, cold | 263 ms |
+
+  bubblewrap cannot run there either, for the same AppArmor reason, so it has no number on
+  any host. That is reported, not simulated.
+- **Exit gate met:** one command regenerates a result (and, with `--readme`, the README
+  table); the README table is generated from the VM's JSON, and a test fails if they drift.
 
 **Exit gate:** the table regenerates from one command, and the README table is generated
 from the results.
@@ -753,5 +767,5 @@ from the results.
 | 4 | Runtime enforcement and holdout | done | see git log | |
 | 5 | Observe, generate, importer, denial explain | done | see git log | |
 | 6 | MCP server | done | see git log | |
-| 7 | Benchmarks | in progress: VM done, CI x86_64 pending | | |
+| 7 | Benchmarks | done | see git log | |
 | 8 | PyPI release | not started | | |

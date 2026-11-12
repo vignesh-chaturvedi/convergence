@@ -9,7 +9,7 @@ Docker. The method is fixed in [ADR 0011](../docs/adr/0011-benchmark-method.md):
 | Result | Where |
 |---|---|
 | [`results/lima-ubuntu-24.04-ga-aarch64.md`](results/lima-ubuntu-24.04-ga-aarch64.md) | the development VM: Apple M2 under Lima (`vz`), Ubuntu 24.04, stock kernel 6.8. The README table is generated from its JSON |
-| `results/gha-ubuntu-24.04-x86_64.md` | a GitHub-hosted `ubuntu-24.04` runner (x86_64), from the manual `benchmarks` workflow: a shared VM, so noisy |
+| [`results/gha-ubuntu-24.04-x86_64.md`](results/gha-ubuntu-24.04-x86_64.md) | a GitHub-hosted `ubuntu-24.04` runner (AMD EPYC, x86_64, kernel 7.0), from the manual `benchmarks` workflow: a shared VM, so noisy |
 | [`results/mcp-latency-lima-ubuntu-24.04-ga-aarch64.md`](results/mcp-latency-lima-ubuntu-24.04-ga-aarch64.md) | Phase 6's measurement of `run_sandboxed` alone |
 
 The JSON files are authoritative, and each Markdown file is generated from its JSON.
@@ -31,6 +31,9 @@ PYTHONPATH=. uv run python benchmarks/bench.py readme
 - passwordless `sudo`, for the Docker rows and the cold runs. Each cold run stops Docker,
   drops the page cache, and starts Docker again.
 
-A configuration that cannot run is reported as `n/a`, with the reason, never left out. On
-stock Ubuntu 24.04, bubblewrap cannot run unprivileged: AppArmor restricts unprivileged user
-namespaces, which it needs. Convergence needs none.
+A configuration that cannot run is reported as `n/a`, with the reason, never left out.
+
+bubblewrap cannot run unprivileged on either host measured: the stock Ubuntu 24.04 VM, or
+GitHub's `ubuntu-24.04` runner. AppArmor restricts the unprivileged user namespaces it needs.
+Measuring it would mean adding an AppArmor profile that grants it `userns`, a change to the
+host's security configuration that was not made. Convergence needs no namespaces.

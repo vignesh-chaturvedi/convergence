@@ -1,0 +1,246 @@
+{
+  "schema": "convergence.bench/1",
+  "environment": {
+    "label": "GitHub-hosted ubuntu-24.04 runner, x86_64 (a noisy shared VM)",
+    "cpu": "AMD EPYC 9V45 96-Core Processor",
+    "cpus": 4,
+    "memory_mib": 15983,
+    "kernel": "7.0.0-1017-azure",
+    "arch": "x86_64",
+    "os": "Ubuntu 24.04.5 LTS",
+    "python": "3.12.3",
+    "convergence": "0.1.0.dev0",
+    "commit": "58c65eaa3f11f58fdcbb02246c0a7fc5e624c59b",
+    "strace": "strace -- version 6.8",
+    "bwrap": "bubblewrap 0.9.0",
+    "docker": "28.0.4",
+    "timestamp": "2026-11-12T12:17:25Z"
+  },
+  "image": "python@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
+  "method": {
+    "runs": 200,
+    "warmup": 10,
+    "cold_runs": 200
+  },
+  "results": {
+    "bare": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 0.41,
+        "p95_ms": 0.49,
+        "p99_ms": 0.53,
+        "mean_ms": 0.42,
+        "stdev_ms": 0.03
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 10.98,
+        "p95_ms": 13.09,
+        "p99_ms": 19.86,
+        "mean_ms": 11.39,
+        "stdev_ms": 1.83
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 22.14,
+        "p95_ms": 25.47,
+        "p99_ms": 30.18,
+        "mean_ms": 22.51,
+        "stdev_ms": 2.32
+      }
+    },
+    "sudo": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 4.76,
+        "p95_ms": 5.13,
+        "p99_ms": 5.76,
+        "mean_ms": 4.8,
+        "stdev_ms": 0.24
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 4.81,
+        "p95_ms": 4.94,
+        "p99_ms": 5.11,
+        "mean_ms": 4.81,
+        "stdev_ms": 0.09
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 4.78,
+        "p95_ms": 5.7,
+        "p99_ms": 8.96,
+        "mean_ms": 4.93,
+        "stdev_ms": 0.86
+      }
+    },
+    "convergence-api": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 15.16,
+        "p95_ms": 18.22,
+        "p99_ms": 18.84,
+        "mean_ms": 15.31,
+        "stdev_ms": 1.48
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 27.53,
+        "p95_ms": 28.55,
+        "p99_ms": 29.67,
+        "mean_ms": 27.35,
+        "stdev_ms": 0.92
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 37.47,
+        "p95_ms": 71.39,
+        "p99_ms": 121.36,
+        "mean_ms": 42.31,
+        "stdev_ms": 19.04
+      }
+    },
+    "convergence-api-trace": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 38.8,
+        "p95_ms": 39.9,
+        "p99_ms": 53.69,
+        "mean_ms": 37.23,
+        "stdev_ms": 4.71
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 67.69,
+        "p95_ms": 73.41,
+        "p99_ms": 100.94,
+        "mean_ms": 67.0,
+        "stdev_ms": 7.77
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 78.33,
+        "p95_ms": 87.62,
+        "p99_ms": 115.69,
+        "mean_ms": 81.04,
+        "stdev_ms": 17.15
+      }
+    },
+    "convergence-mcp": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 16.7,
+        "p95_ms": 22.31,
+        "p99_ms": 38.99,
+        "mean_ms": 16.84,
+        "stdev_ms": 4.37
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 26.62,
+        "p95_ms": 30.68,
+        "p99_ms": 45.92,
+        "mean_ms": 27.76,
+        "stdev_ms": 4.11
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 38.41,
+        "p95_ms": 40.53,
+        "p99_ms": 41.48,
+        "mean_ms": 38.53,
+        "stdev_ms": 1.15
+      }
+    },
+    "convergence-cli": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 137.73,
+        "p95_ms": 148.7,
+        "p99_ms": 171.53,
+        "mean_ms": 139.02,
+        "stdev_ms": 9.15
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 149.26,
+        "p95_ms": 162.77,
+        "p99_ms": 183.36,
+        "mean_ms": 150.97,
+        "stdev_ms": 7.1
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 162.79,
+        "p95_ms": 179.0,
+        "p99_ms": 211.18,
+        "mean_ms": 165.15,
+        "stdev_ms": 9.54
+      }
+    },
+    "bwrap": {
+      "true": {
+        "unavailable": "bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"
+      },
+      "python": {
+        "unavailable": "bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"
+      },
+      "wordcount": {
+        "unavailable": "bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"
+      }
+    },
+    "docker-warm": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 109.56,
+        "p95_ms": 129.85,
+        "p99_ms": 153.45,
+        "mean_ms": 112.17,
+        "stdev_ms": 11.13
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 120.94,
+        "p95_ms": 137.75,
+        "p99_ms": 181.85,
+        "mean_ms": 124.43,
+        "stdev_ms": 11.8
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 149.44,
+        "p95_ms": 168.79,
+        "p99_ms": 191.39,
+        "mean_ms": 150.07,
+        "stdev_ms": 10.39
+      }
+    },
+    "docker-cold": {
+      "true": {
+        "runs": 200,
+        "p50_ms": 263.29,
+        "p95_ms": 304.19,
+        "p99_ms": 312.43,
+        "mean_ms": 266.23,
+        "stdev_ms": 14.55
+      },
+      "python": {
+        "runs": 200,
+        "p50_ms": 291.35,
+        "p95_ms": 338.95,
+        "p99_ms": 372.33,
+        "mean_ms": 297.02,
+        "stdev_ms": 20.35
+      },
+      "wordcount": {
+        "runs": 200,
+        "p50_ms": 325.45,
+        "p95_ms": 356.33,
+        "p99_ms": 390.15,
+        "mean_ms": 327.12,
+        "stdev_ms": 17.07
+      }
+    }
+  }
+}

@@ -15,8 +15,9 @@ All notable changes to this project are recorded here. The format follows
   warm and cold; 200 runs per cell. The README table is generated from the results, and a
   test keeps it in sync. On the development VM, `/usr/bin/true` takes 7.9 ms at the median
   through the warm API, against 107 ms for warm `docker run` and 0.21 ms with no sandbox.
-  bubblewrap cannot run unprivileged on stock Ubuntu 24.04. A manual workflow measures a
-  GitHub-hosted x86_64 runner.
+  bubblewrap cannot run unprivileged on stock Ubuntu 24.04, on the VM or on GitHub's runner.
+  A manual workflow measured a GitHub-hosted x86_64 runner too (noisy): 15 ms warm API,
+  110 ms warm `docker run`.
 
 - `convergence mcp` (ADR 0010), an MCP server over stdio. It needs the optional
   `convergence-sandbox[mcp]` extra (`mcp` 2.3.0).

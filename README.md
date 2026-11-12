@@ -1,78 +1,117 @@
 # Convergence
 
-Convergence runs AI agent tools (MCP servers, agent skills, and model-generated scripts)
-under a least-privilege policy that the Linux kernel enforces. It uses Landlock, seccomp-bpf,
-and resource limits, and needs no root. It can also generate that policy from the tool's
-observed behaviour, the way SELinux's `audit2allow` does.
+Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
+least-privilege policy that the Linux kernel enforces. It uses Landlock, seccomp-bpf,
+`no_new_privs`, and resource limits, needs no root and no namespaces, and runs on a stock
+Ubuntu 24.04 kernel.
+
+It can also write the policy for you from what a tool actually did, the way SELinux's
+`audit2allow` does. Every rule says which observed event justified it.
 
 It is the companion to [Divergence](https://github.com/vignesh-chaturvedi/divergence).
-Divergence reports the gap between what an MCP server declares and what it actually does.
+Divergence reports the gap between what an MCP server declares and what it does;
 Convergence contains what it does.
 
-## Status: pre-alpha
+> **Status: 0.1.0, the first release.** Every claim below comes from tests and measurements
+> in this repository, on real kernels. Nothing here has been independently audited. Do not
+> make it your only protection for code you do not trust.
 
-This repository is being built in phases; see [PLAN.md](PLAN.md). `convergence run`
-enforces policies, but nothing here has been independently audited yet. Do not rely on it as
-your only protection for untrusted code.
-
-This README only claims what the tests and the escape matrix in this repository support.
-Benchmarks will be added as the phases that produce them land.
-
-## Run a tool under a policy: `convergence run`
+## Quickstart
 
 ```bash
-convergence run --policy policy.yaml -- python3 tool.py --input data.json
+pip install convergence-sandbox            # add [mcp] for the MCP server
+convergence doctor                         # what this kernel can enforce, proven live
 ```
 
-The tool runs with:
-- **Landlock** limiting it to the policy's files and TCP/UDP ports;
-- **seccomp-bpf** denying escape-prone system calls, and socket families and protocols the
-  policy does not grant;
-- **`no_new_privs`** and resource limits;
-- an environment built only from the policy, and no inherited descriptors beyond stdio.
+A policy lists what a tool may do; everything else is denied
+([reference](docs/policy.md), [examples](examples/policies/)):
 
-Everything it starts is killed when its first process exits, or at the policy's wall-clock
-limit. Convergence refuses a policy the running kernel cannot fully enforce, unless you pass
-`--allow-degraded`, and then it lists exactly what is degraded. Each run is recorded as JSON
-under `~/.local/state/convergence/runs/`, or printed with `--json`. With `--trace`, the
-record also says which rule denied each failed operation (strace, outside the sandbox;
-[ADR 0007](docs/adr/0007-denial-capture.md)). The spawn model is in
-[ADR 0006](docs/adr/0006-spawn-model.md).
+```yaml
+version: 1
+filesystem:
+  read: [/usr, /etc/ld.so.cache, "${CWD}"]
+  write: ["${SCRATCH}"]
+  execute: [/usr/bin/python3.12, /lib64/ld-linux-x86-64.so.2]
+network: {tcp_connect: [443]}
+resources: {wall_clock_seconds: 60}
+environment: {set: {PATH: /usr/bin, HOME: "${SCRATCH}"}}
+```
 
-On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), the escape matrix gives these
-results ([report](escape/results/README.md)):
+```bash
+convergence explain --policy policy.yaml             # how this kernel enforces each rule
+convergence run --policy policy.yaml -- python3 tool.py
+```
 
-| | Result |
+Or let Convergence write the policy:
+
+```bash
+convergence observe --out obs.json -- python3 tool.py    # NOT a sandbox: use a disposable VM
+convergence generate --from obs.json --out policy.yaml
+convergence run --trace --policy policy.yaml -- python3 tool.py
+convergence explain --run <run id>                        # why something was denied, and the fix
+```
+
+## What is enforced
+
+| Mechanism | What it does |
 |---|---|
-| Development attacks blocked | 53 of the 55 that can be tested there (54 on the Linux 7.0 CI kernels) |
-| Benign control workloads | all 10 run, with no false denials |
-| Escapes | 1, running a readable program through the dynamic loader: a known limitation of the design, see [THREAT_MODEL.md](THREAT_MODEL.md) |
-| Needs a newer kernel | 1, signal scoping (Landlock ABI 6) |
+| **Landlock** | Files: read, write, and execute only where granted. TCP ports from ABI 4, UDP from ABI 10, signals and abstract unix sockets scoped to the sandbox from ABI 6 |
+| **seccomp-bpf** | Denies escape- and tamper-prone syscalls: `ptrace`, `process_vm_*`, `mount`, `unshare`, namespace flags on `clone`, `io_uring`, `bpf`, `perf_event_open`, `userfaultfd`, keyrings, `TIOCSTI`, and more. Allows only the socket families, types, and protocols the policy grants. Not user notification, which is never used as a boundary |
+| **`no_new_privs`** | setuid and file-capability binaries gain nothing |
+| **rlimits** | CPU, memory, file size, open files, processes; core dumps off |
+| **The supervisor** | Builds the environment from the policy alone and closes inherited descriptors. When the tool's first process exits, or at the wall clock, it kills everything the tool started, including daemons that left the session |
 
-The sealed holdout of 26 attacks was written independently of the runtime and run once
-against it ([report](escape/results/holdout-convergence-lima-ubuntu-24.04-ga-aarch64.md)):
-- 21 blocked;
-- 1 escape, the same dynamic-loader limitation;
-- 1 that needs a newer kernel;
-- 3 that proved nothing either way: the run stopped before the case marked its attempt.
+Convergence refuses a policy the running kernel cannot fully enforce, unless you pass
+`--allow-degraded`, and then it lists exactly what is degraded. Each run leaves a JSON
+record. Design: [THREAT_MODEL.md](THREAT_MODEL.md) and the [ADRs](docs/adr/).
 
-## What works today: `convergence doctor`
+## What is not enforced
 
-`doctor` reports what the running kernel can enforce. It proves each feature by using it in
-a throwaway child process: for example, a child confined by Landlock must be denied a read
-outside its directory. A kernel version number alone is never taken as proof.
+These are documented, measured where possible, and not hidden:
 
-```bash
-convergence doctor          # human-readable report
-convergence doctor --json   # schema convergence.doctor/1
-```
+- **Hosts.** Landlock filters by port, not host: `tcp_connect: [443]` allows HTTPS to every
+  host.
+- **Code the tool can read.** Execute grants limit which programs the kernel starts. They
+  do not stop the dynamic loader running a file the tool can only read. This is the one
+  escape the matrix found, in development and in the holdout; whatever runs that way stays
+  inside the sandbox.
+- **Older kernels.** Below Landlock ABI 6, the tool can signal other processes of the same
+  user. Below ABI 9, unix sockets cannot be limited to the sandbox, so they are denied
+  altogether.
+- **File metadata.** `stat`, `chmod`, `chown`, and `utime` are outside Landlock's control.
+- **A supervisor killed with `SIGKILL`.** The tool dies with it, but processes it started
+  can outlive it.
+- **Kernel exploits, side channels, and misuse of what the policy grants.**
+- **`observe` and `--trace`** run strace with your access. `observe` is not a sandbox at
+  all.
 
-On the stock Ubuntu 24.04 kernel (6.8, Landlock ABI 4), `doctor` verifies filesystem access
-control, cross-directory renames, truncation, TCP ports, seccomp argument filtering,
-`no_new_privs`, the file-size resource limit, and ptrace tracing through strace. It also
-reports what that kernel *cannot* do. For example, signal and abstract-unix-socket scoping need Landlock ABI 6
-([sample output](docs/evidence/doctor/lima-ubuntu-24.04-ga-aarch64.txt),
-[ABI reference](docs/landlock-abi.md)).
+## Results
+
+All measured on real kernels, with no mocks. Rates carry Wilson 95% intervals.
+
+**The escape matrix** ([report](escape/results/README.md)). Attacks are judged by external
+oracles: canary files, network sinks, sentinel processes, the process table. Every attack is
+first proven to escape with no sandbox.
+
+| Set | Kernel | Escape rate | Other outcomes |
+|---|---|---|---|
+| 47 development attacks | stock Ubuntu 24.04, 6.8 (ABI 4) | 1/44 (2.3%; 0.4–11.8%) | 1 needs ABI 6; 2 not testable on that host |
+| 47 development attacks | Linux 7.0 (ABI 8), 3 CI runners | 1/45 (2.2%; 0.4–11.6%) | 2 not testable |
+| **26 holdout attacks**, sealed, written independently, run once | stock Ubuntu 24.04, 6.8 | **1/22 (4.5%; 0.8–21.8%)** | 1 needs ABI 6; 3 proved nothing either way |
+
+Every escape is the dynamic-loader limitation above.
+
+**False denials**, on 10 benign workloads: git, tar, sqlite, an HTTP client and server,
+shell pipelines, and more.
+
+| Policy | False-denial rate |
+|---|---|
+| Hand-written | 0/10 (0.0%; 0.0–27.8%) |
+| Generated from one observation, same input | 0/10 (0.0%; 0.0–27.8%) |
+| Generated from one observation, different input | 3/10 (30%; 10.8–60.3%) |
+
+The last row is how incomplete a single observation is. Observe a tool on the inputs it will
+really get.
 
 ## What it costs
 
@@ -94,109 +133,93 @@ Generated from [`benchmarks/results/lima-ubuntu-24.04-ga-aarch64.json`](benchmar
 n/a: bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
 <!-- benchmarks:end -->
 
-- **What the rows include.** Each Docker row includes `sudo` (its own row), and the cold CLI
-  row includes starting Python. A warm call, through the library API or MCP, costs a fork
-  and the sandbox setup.
-- **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04 at all, neither on the VM
-  nor on GitHub's runner. AppArmor restricts the user namespaces it needs; Convergence uses
-  none.
-- Method: [ADR 0011](docs/adr/0011-benchmark-method.md). All results, including a
-  GitHub-hosted x86_64 runner (noisy, about 2x slower for warm calls):
-  [benchmarks/](benchmarks/README.md).
+- **What the rows include.** Each Docker row includes `sudo`, which has its own row. The
+  cold CLI row includes starting Python.
+- **A warm call**, through the library API or MCP, costs one fork and the sandbox setup.
+- **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04, on the VM or on GitHub's
+  runner: AppArmor restricts the user namespaces it needs.
+- **Method:** [ADR 0011](docs/adr/0011-benchmark-method.md). An x86_64 run on a GitHub
+  runner is in [benchmarks/](benchmarks/README.md).
 
-## Generate a policy from what a tool does: `observe` and `generate`
+## Commands
 
-```bash
-convergence observe --out obs.json -- python3 tool.py --input data.json   # NOT a sandbox
-convergence generate --from obs.json --out policy.yaml --rationale why.json
-convergence run --policy policy.yaml -- python3 tool.py --input data.json
-```
-
-`observe` runs the tool under strace and records:
-- the files it opens, and the directories it lists or changes;
-- the programs it runs, and the ports it uses;
-- every system call it makes.
-
-It is **not a sandbox**: the tool has your full access, so observe untrusted tools only in a
-disposable VM ([ADR 0008](docs/adr/0008-observation-mechanism.md)).
-
-`generate` writes the smallest policy that permits what was observed
-([ADR 0009](docs/adr/0009-policy-generation.md)):
-- grants are exact unless an operation needs a directory;
-- an installed runtime tree read heavily is collapsed to its directory, and the comment says
-  how many files justified it;
-- every rule cites the events behind it;
-- credential locations, other processes' `/proc` entries, and unix-socket connections are
-  never granted, only reported.
-
-The policy fails closed on code paths the observation did not see. Measured on the 10 benign
-controls, each observed once and run under its generated policy
-([report](escape/results/fdr-lima-ubuntu-24.04-ga-aarch64.md)):
-
-| Input | False-denial rate |
+| Command | Does |
 |---|---|
-| the same input it was observed with | 0/10 |
-| a different input: more files, more git history, another port | 3/10 |
+| `doctor` | Proves what this kernel can enforce, using each feature in a throwaway child |
+| `validate POLICY` | Checks the schema, the paths, the syscall names, and risky grants |
+| `explain --policy POLICY` | Shows how this kernel enforces each rule: `enforced`, `partial`, or `unenforceable` |
+| `run --policy POLICY -- CMD` | Runs CMD sandboxed. `--trace` records which rule denied each failed operation |
+| `observe -- CMD` | Records what CMD does under strace. **Not a sandbox** |
+| `generate --from OBS` | Writes the smallest policy for an observation, with a reason per rule |
+| `explain --run ID` | For each denial: the cause, the rule, the smallest fix as a YAML diff, and the risk |
+| `import divergence REPORT` | Turns a Divergence dynamic-tier report into a partial observation |
+| `mcp --policies DIR` | Serves `run_sandboxed`, `check_policy`, `generate_policy`, and `explain_denials` over MCP |
 
-The second number is how incomplete a single observation is. Observe a tool on the inputs it
-will really get, then use `run --trace` and `explain --run` for what was missed:
-`convergence explain --run ID` shows each denial's cause, the rule behind it, the smallest
-policy change that would permit it, and its risk. It never changes the policy.
+`run` exits with the tool's own status, or 128+N for signal N, 124 at the wall clock, 125
+when the tool was not started, 126 when it could not execute, and 127 when it was not found.
 
-`convergence import divergence REPORT` turns a
-[Divergence](https://github.com/vignesh-chaturvedi/divergence) dynamic-tier report into an
-observation for `generate`, without running the tool outside a sandbox. Divergence drops
-runtime noise, so the import is partial: merge a runtime baseline (`--baseline`), or the
-policy fails closed on the interpreter's own paths. Decoys, secrets, and blocked attempts
-are never granted.
-
-## For agents: `convergence mcp`
+### For agents: `convergence mcp`
 
 ```bash
 pip install 'convergence-sandbox[mcp]'
-convergence mcp --policies ./policies     # stdio; clients name a policy in that directory
+convergence mcp --policies ./policies
 ```
 
-The server offers four tools:
-- `run_sandboxed(command, policy, timeout_s?, cwd?, trace?)`;
-- `check_policy(policy)`;
-- `generate_policy(observation)`;
-- `explain_denials(run_id)`.
+- **The operator chooses the policies, not the agent.** A client can only name a policy in
+  `--policies`, unless the server is started with `--allow-inline-policy`.
+- **Commands are argv lists**, never shell strings.
+- **`observe`**, which runs commands unconfined, exists only with `--allow-observe`
+  ([ADR 0010](docs/adr/0010-mcp-server.md)).
 
-**The operator chooses the policies, not the agent.** A client can only name one from
-`--policies`, unless the server is started with `--allow-inline-policy`. Commands are argv
-lists and never go through a shell. `observe`, which runs commands unconfined, exists only
-with `--allow-observe` ([ADR 0010](docs/adr/0010-mcp-server.md)).
+From Python, `convergence.api.Sandbox` runs commands through the same warm helper.
 
-Every call goes through a single-threaded spawn helper that has its modules already loaded.
-On the development VM, `run_sandboxed` of `/usr/bin/true` takes 9.5 ms at the median, against
-127 ms for a cold `convergence run`
-([numbers](benchmarks/results/mcp-latency-lima-ubuntu-24.04-ga-aarch64.md)).
+## Prior art
 
-## Policies: `validate` and `explain`
+Checked against each project's own repository on 2026-11-12:
 
-A policy lists what a tool may do. Everything else is denied
-([format reference](docs/policy.md), [examples](examples/policies/)).
+- **[sandlock](https://github.com/multikernel/sandlock)** (Apache-2.0) is the closest. It
+  uses Landlock, seccomp-bpf, and seccomp user notification. It needs Linux 6.12 or later
+  (Landlock ABI 6). It has `sandlock learn`, which turns observed behaviour into a profile,
+  and an MCP integration. Convergence differs in four ways:
+  - it runs on the stock 24.04 kernel (ABI 4);
+  - it never relies on user notification for enforcement, because of time-of-check races on
+    pointer arguments;
+  - every generated rule cites the observations behind it;
+  - it publishes an escape matrix with a sealed holdout.
+- **[bubblewrap](https://github.com/containers/bubblewrap)** isolates with namespaces. It
+  needs unprivileged user namespaces, which stock Ubuntu 24.04 restricts through AppArmor
+  (measured above).
+- **OpenAI [Codex CLI](https://github.com/openai/codex)** sandboxes commands with bubblewrap
+  and seccomp on Linux, keeping a legacy Landlock path, and with Seatbelt on macOS. It warns
+  when bubblewrap cannot create user namespaces.
+- **Anthropic's [sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime)**
+  is used by Claude Code and can also wrap MCP servers. It uses bubblewrap on Linux and
+  `sandbox-exec` on macOS, with proxy-based network filtering.
+
+## With Divergence
+
+[Divergence](https://github.com/vignesh-chaturvedi/divergence) runs an MCP server or skill
+inside its own sandbox and reports what it touched. `convergence import divergence` turns
+that report into an observation, so a policy can be generated without ever running the tool
+unconfined:
 
 ```bash
-convergence validate policy.yaml          # schema, paths, syscall names, risky grants
-convergence explain --policy policy.yaml  # how each rule is enforced on this kernel
+convergence observe --out runtime.json -- python3 -c pass      # the interpreter's own needs
+convergence import divergence report.json --baseline runtime.json --out obs.json
+convergence generate --from obs.json --out policy.yaml
 ```
 
-`explain` reports every rule as `enforced`, `enforced-with-caveat`, `partial`, or
-`unenforceable` on the running kernel. `run` refuses a policy with a `partial` or
-`unenforceable` rule unless told explicitly. For example, on stock Ubuntu 24.04
-(Landlock ABI 4), limiting UDP to port 53 is `unenforceable`: that needs ABI 10.
-
-Landlock filters network access by **port, not host**. Allowlisting hosts or IP addresses is
-out of scope for v1.
+- **Decoys, secrets, and blocked attempts** are never granted.
+- **The import is always partial.** Divergence drops runtime noise on purpose, which is why
+  the runtime baseline is merged in.
 
 ## Development
 
 Enforcement is Linux-only, and every security test runs against a real kernel. On macOS,
-development uses a [Lima](https://lima-vm.io) VM running Ubuntu 24.04. Docker Desktop is not
-used, because its VM kernel and default seccomp profile can hide or block the primitives
-under test ([ADR 0001](docs/adr/0001-python-on-kernel-primitives-tested-on-real-kernels.md)).
+development uses a [Lima](https://lima-vm.io) VM with Ubuntu 24.04, never Docker Desktop
+([ADR 0001](docs/adr/0001-python-on-kernel-primitives-tested-on-real-kernels.md)). CI runs
+everything on GitHub's x86_64 and arm64 runners, and on the stock 24.04 kernel in a nested
+VM.
 
 ```bash
 scripts/vm.sh create      # macOS only: create and start the VM
@@ -204,7 +227,8 @@ scripts/vm.sh provision   # install the pinned toolchain (uv) inside Linux
 scripts/vm.sh check       # lint, format check, type check, and tests inside Linux
 ```
 
-On a Linux machine, the same `scripts/vm.sh` commands run directly on the host.
+How the project was built, phase by phase: [PLAN.md](PLAN.md).
+Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

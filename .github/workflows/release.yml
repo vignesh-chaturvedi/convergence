@@ -1,0 +1,101 @@
+name: release
+
+# Runs only for a version tag (v0.1.0, ...). Publishing uses PyPI trusted publishing (OIDC):
+# no tokens are stored anywhere. See docs/RELEASING.md for the one-time setup on PyPI and
+# TestPyPI, which only the project owner can do.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: 0.13.6
+
+jobs:
+  build:
+    name: build and check
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          checksum: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+          python-version: "3.12"
+      - name: The tag matches the version in pyproject.toml
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          test "v$version" = "$TAG" || { echo "tag $TAG does not match version $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: uv build
+      - name: Check the distributions
+        run: uvx --from "twine==6.2.0" twine check --strict dist/*
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    name: publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/convergence-sandbox
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  install-from-testpypi:
+    name: install from TestPyPI on a fresh runner
+    needs: [build, testpypi]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install and run doctor
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          python3 -m venv /tmp/venv
+          # Dependencies from PyPI only; just this package from TestPyPI, so nothing else
+          # can be substituted from TestPyPI.
+          /tmp/venv/bin/pip install "pydantic>=2.12,<3" "pyyaml>=6.0.2,<7" "mcp>=2.3.0"
+          for attempt in 1 2 3 4 5 6; do
+            /tmp/venv/bin/pip install --no-deps --index-url https://test.pypi.org/simple/ \
+              "convergence-sandbox==$VERSION" && break
+            sleep 20
+          done
+          /tmp/venv/bin/convergence --version
+          /tmp/venv/bin/convergence doctor
+          /tmp/venv/bin/convergence mcp --help > /dev/null
+
+  pypi:
+    name: publish to PyPI
+    needs: install-from-testpypi
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/convergence-sandbox
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 7 done (exit gate met); Phase 8 next · **Last updated:** 2026-11-12
+**Status:** Phase 8 in progress: release prepared; publishing waits for the owner's PyPI setup · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -718,6 +718,37 @@ from the results.
 - Final summary: what was built, escape-matrix results (dev and holdout), the benchmark
   table, and every known limitation.
 
+**Progress (Phase 8):**
+- **README** rewritten for the release: pitch, quickstart, what is and is not enforced, the
+  escape-matrix and false-denial tables with Wilson intervals, and the generated benchmark
+  table.
+- **Prior art checked against each project's own repository (2026-11-12):**
+  - sandlock: Landlock, seccomp, and user notification; Linux 6.12+; `sandlock learn`; MCP.
+  - Codex CLI: bubblewrap plus seccomp on Linux, legacy Landlock path, Seatbelt on macOS.
+  - Anthropic's sandbox-runtime: bubblewrap on Linux, `sandbox-exec` on macOS.
+  - bubblewrap itself.
+
+  The "safe-agent" project named above could not be identified, so it is not cited.
+- **THREAT_MODEL.md** gains the MCP server's residual risk. **CHANGELOG** has a 0.1.0 entry.
+  The version is now `0.1.0`, and the classifier Alpha.
+- **Package:** `convergence-sandbox`, which is free on PyPI and TestPyPI (`convergence` is
+  taken). `uv build` gives a wheel holding only the `convergence` package and the license;
+  `twine check` passes. The sdist also carries `pyproject.toml.orig`, which `uv_build` keeps
+  when it normalises the file.
+- **Fresh VM:** the wheel (with `[mcp]`) installed on a new Ubuntu 24.04 VM from the stock
+  template (kernel 6.8, aarch64), using only pip:
+  - `doctor` verified the kernel features;
+  - a sandboxed run worked and a read outside the policy was denied;
+  - `convergence mcp` started.
+
+  The VM was then deleted.
+- **`.github/workflows/release.yml`:** trusted publishing on a `v*` tag. It builds, runs
+  `twine check --strict`, publishes to TestPyPI, installs from TestPyPI on a fresh runner
+  (dependencies from PyPI only) and runs `doctor`, then publishes to PyPI. Actions are
+  pinned by commit. The owner's steps are in `docs/RELEASING.md`.
+- **Pending (owner only):** pending publishers on PyPI and TestPyPI, optionally a reviewer
+  on the `pypi` environment, and the decision to push the `v0.1.0` tag.
+
 ---
 
 ## 8. Metrics
@@ -768,4 +799,4 @@ from the results.
 | 5 | Observe, generate, importer, denial explain | done | see git log | |
 | 6 | MCP server | done | see git log | |
 | 7 | Benchmarks | done | see git log | |
-| 8 | PyPI release | not started | | |
+| 8 | PyPI release | prepared: waiting for PyPI trusted-publisher setup and the tag | | |

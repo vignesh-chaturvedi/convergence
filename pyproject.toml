@@ -1,6 +1,6 @@
 [project]
 name = "convergence-sandbox"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Least-privilege sandboxing for AI agent tools on Linux: Landlock and seccomp policies generated from observed behaviour."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,7 +11,7 @@ authors = [
 ]
 keywords = ["sandbox", "landlock", "seccomp", "mcp", "agent", "security", "least-privilege"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: POSIX :: Linux",

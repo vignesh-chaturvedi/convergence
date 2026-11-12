@@ -164,6 +164,11 @@ escapes:
   `no_new_privs` and a seccomp filter that denies sockets and the dangerous syscalls it does
   not need, but it keeps the user's file access, so a bug in its decoders could be used to
   escape. Tracing is off by default, and the escape matrix measures the default.
+- **The MCP server chooses nothing itself.** `convergence mcp`, its spawn helper, and its
+  workers run unconfined, like the CLI's supervisor (ADR 0010). Their attack surface is the
+  JSON they parse and the policies they load. A client allowed to send inline policies
+  (`--allow-inline-policy`) chooses its own sandbox. That is why the default is the
+  operator's `--policies` directory.
 - **A supervisor killed with `SIGKILL`.** The tool's first process dies with it
   (`PR_SET_PDEATHSIG`). Processes the tool started are re-parented to the next subreaper or
   to init, and keep running inside the sandbox until they exit. Stopping the supervisor any

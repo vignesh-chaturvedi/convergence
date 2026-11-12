@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-12
+
+The first release.
+
+- **Commands:** `doctor`, `validate`, `explain`, `run` (with `--trace`), `observe`,
+  `generate`, `explain --run`, `import divergence`, and `mcp`, plus the
+  `convergence.api.Sandbox` library API.
+- **Enforcement:** Landlock (ABI 1 to 12), seccomp-bpf, `no_new_privs`, and rlimits, with a
+  subreaper supervisor.
+- **Evidence:** an escape matrix of 47 development attacks, 26 sealed holdout attacks, and 10
+  benign controls, run on stock Ubuntu 24.04 and on Linux 7.0. The false-denial rates of
+  generated policies. Benchmarks against no sandbox, bubblewrap, and Docker.
+
+The entries below record how it was built, phase by phase.
+
 ### Added
 
 - `convergence.api.Sandbox`: run sandboxed commands from Python in a warm process, through

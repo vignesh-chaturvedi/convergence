@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 4 in progress: `convergence run` and denial capture built; the holdout run pending · **Last updated:** 2026-11-12
+**Status:** Phase 4 done (exit gate met); Phase 5 next · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -504,7 +504,19 @@ the baseline report is committed.
   by design, with their THREAT_MODEL.md sections. They are reported as `known-limitation`
   and still counted in the escape rate. With that, the CI escape job's confined run is
   required.
-- **Pending:** the one holdout run under Convergence.
+- **Holdout run (2026-11-12), once, at `bd4d071`, on the stock 24.04 kernel (ABI 4):**
+  21 pass, 1 escape (`holdout-exec-via-loader-001`, the documented dynamic-loader
+  limitation), 1 documented limitation (signal scoping, ABI 6), 3 `not-reached`. Escape rate
+  1/22 (Wilson 95% CI 0.8-21.8%). Committed as it came out. Observations made afterwards are
+  listed separately in `escape/results/README.md`: the three `not-reached` cases follow the
+  pattern their development counterparts had before Phase 4 corrected them. No holdout case
+  was changed.
+- **Exit gate met:**
+  - the development escape rate is 1/44, and that one escape is documented as a known
+    limitation;
+  - every control passes under its hand-written policy;
+  - the holdout result is published;
+  - the CI escape job's confined run is required.
 
 **Exit gate:** dev escape rate is 0% or every exception is documented; the controls pass
 under hand-written policies; the holdout result is published; the CI escape job is made
@@ -654,7 +666,7 @@ from the results.
 | 1 | `doctor` and capability probe | done | `2d5ad24` | yes |
 | 2 | Policy schema, `validate`, `explain` | done | see git log | |
 | 3 | Threat model, escape matrix, controls | done | see git log | |
-| 4 | Runtime enforcement and holdout | in progress: `run` and denial capture done; holdout run pending | | |
+| 4 | Runtime enforcement and holdout | done | see git log | |
 | 5 | Observe, generate, importer, denial explain | not started | | |
 | 6 | MCP server | not started | | |
 | 7 | Benchmarks | not started | | |

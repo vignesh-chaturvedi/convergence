@@ -17,7 +17,10 @@ in [ADR 0005](../docs/adr/0005-escape-matrix-design.md); the boundary it tests i
 >   1 documented limitation (`signal-outside-001`, which needs Landlock ABI 6). All 10
 >   controls pass. On the CI kernels (Linux 7.0, ABI 8), 54 pass, including the signal
 >   case.
-> - **The holdout has not been run under Convergence yet.**
+> - **The holdout, run once under Convergence:** 21 pass, 1 escape (the same
+>   dynamic-loader limitation), 1 documented limitation (ABI 6), and 3 `not-reached`, which
+>   prove nothing either way. Escape rate 1/22. See
+>   [results/README.md](results/README.md) for what was observed afterwards.
 >
 > Results are in [results/](results/README.md).
 
@@ -439,5 +442,6 @@ Phase 4 decision on mitigating `chmod`/`chown`/`utime` needs.
   pseudo-terminal for `passwd`); they were corrected and are still valid unconfined.
 - **Phase 4, done:** denial capture, opt-in with `--trace` (ADR 0007). The confined matrix
   is required in CI, with `exec-via-loader-001` as its one listed known limitation.
-- **Phase 4, next:** run the holdout once under Convergence and commit the result as it is. The holdout's earlier entries in `holdout-runs.jsonl` are
+- **Phase 4, done:** the holdout ran once under Convergence (commit `bd4d071`). Its result
+  is committed as it came out. The holdout's earlier entries in `holdout-runs.jsonl` are
   unconfined validity runs, not that run.

@@ -29,6 +29,9 @@ All notable changes to this project are recorded here. The format follows
   `unattributed`. Tracing is opt-in, not the default the plan proposed: strace parses memory
   the tool controls while holding the user's file access. If strace is missing or cannot
   attach, the run goes on untraced and the record says why.
+- The holdout's one run under Convergence, committed as it came out: 21 pass, 1 escape (the
+  dynamic-loader limitation), 1 documented limitation (ABI 6), 3 `not-reached`; escape rate
+  1/22.
 - `escape/known-limitations.yaml`: development cases that escape by design, each with its
   reason and THREAT_MODEL.md section. They are reported as `known-limitation`, count in the
   escape rate, and do not fail the run; the list never applies to the holdout. The CI escape

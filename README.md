@@ -49,7 +49,12 @@ results ([report](escape/results/README.md)):
 | Escapes | 1, running a readable program through the dynamic loader: a known limitation of the design, see [THREAT_MODEL.md](THREAT_MODEL.md) |
 | Needs a newer kernel | 1, signal scoping (Landlock ABI 6) |
 
-The sealed holdout, which was written independently of the runtime, has not been run yet.
+The sealed holdout of 26 attacks was written independently of the runtime and run once
+against it ([report](escape/results/holdout-convergence-lima-ubuntu-24.04-ga-aarch64.md)):
+- 21 blocked;
+- 1 escape, the same dynamic-loader limitation;
+- 1 that needs a newer kernel;
+- 3 that proved nothing either way: the run stopped before the case marked its attempt.
 
 ## What works today: `convergence doctor`
 

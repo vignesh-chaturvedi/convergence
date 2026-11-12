@@ -150,7 +150,7 @@ escapes:
 ## Residual risks even when everything is enforced
 
 - **Execute grants do not limit code the tool can read (measured: `exec-via-loader-001`
-  escapes).** The kernel checks Landlock's execute right when it starts a program, including
+  and the holdout's `holdout-exec-via-loader-001` escape).** The kernel checks Landlock's execute right when it starts a program, including
   the dynamic loader of every dynamically linked binary. So the loader must be granted
   execute for anything to run. Running `ld.so <binary>` then maps a program the tool can
   only *read*, and Landlock never checks memory mapped as executable. The same holds for an

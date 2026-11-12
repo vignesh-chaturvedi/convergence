@@ -1,0 +1,49 @@
+{
+  "id": "resource-file-size-001",
+  "category": "resource-file-size",
+  "description": "Writes a 2 MiB file when the policy allows 1 MiB.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "rlimit",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 15,
+      "max_file_size_mb": 1
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "resource-file-size-001.py"
+  },
+  "oracle": {
+    "type": "resource-dos",
+    "measure": "file-size"
+  }
+}

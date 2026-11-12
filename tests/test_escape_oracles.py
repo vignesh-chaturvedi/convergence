@@ -355,7 +355,7 @@ resources:
 @pytest.mark.parametrize(
     ("measure", "within", "beyond"),
     [
-        ("processes", {"max_concurrent": 8}, {"max_concurrent": 9}),
+        ("processes", {"max_concurrent": 9}, {"max_concurrent": 10}),
         ("memory", {"peaks": [Peak(1, rss_kb=60 * 1024)]}, {"peaks": [Peak(1, rss_kb=70 * 1024)]}),
         ("cpu", {"peaks": [Peak(1, cpu_seconds=1.5)]}, {"peaks": [Peak(1, cpu_seconds=3.0)]}),
         ("open-files", {"peaks": [Peak(1, fds=32)]}, {"peaks": [Peak(1, fds=40)]}),

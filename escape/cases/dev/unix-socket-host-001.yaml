@@ -1,0 +1,49 @@
+{
+  "id": "unix-socket-host-001",
+  "category": "unix-socket-host",
+  "description": "Connects to a pathname unix socket outside the sandbox, standing in for a host service.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "landlock (ABI 9) / seccomp",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "unix-socket-host-001.py"
+  },
+  "oracle": {
+    "type": "network-sink",
+    "family": "unix",
+    "protocol": "stream"
+  }
+}

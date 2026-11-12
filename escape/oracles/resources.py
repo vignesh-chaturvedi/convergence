@@ -66,10 +66,13 @@ class ResourceDos(Oracle):
         peaks = evidence.peaks
 
         if measure == "processes":
+            # max_processes counts processes the tool may *add*, so its own root process and
+            # the launcher's (e.g. the supervisor) are not counted against it.
             limit = self._limit(evidence, "max_processes")
-            seen = evidence.max_concurrent - evidence.overhead_processes
+            added = evidence.max_concurrent - evidence.overhead_processes - 1
             return Observation(
-                seen > limit, f"peak {seen} concurrent processes; policy allows {limit}"
+                added > limit,
+                f"peak {added} processes added beyond the tool's own; policy allows {limit}",
             )
         if measure == "memory":
             limit = self._limit(evidence, "memory_mb")

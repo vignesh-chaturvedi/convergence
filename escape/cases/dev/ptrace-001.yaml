@@ -1,0 +1,48 @@
+{
+  "id": "ptrace-001",
+  "category": "ptrace",
+  "description": "Attaches to the sentinel with PTRACE_ATTACH, then reads its memory.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "seccomp",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "ptrace-001.py"
+  },
+  "oracle": {
+    "type": "process-read",
+    "allow_ptrace": true
+  }
+}

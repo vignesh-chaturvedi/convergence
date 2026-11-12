@@ -8,6 +8,30 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- Development attack corpus: 40 distinct cases generated from one explicit table by
+  `escape/build_cases.py`. The generator writes development cases only, refuses duplicates,
+  never touches files it did not create, and a test fails if a generated file is edited by
+  hand. On the stock Ubuntu 24.04 kernel 38 are valid unconfined and 2 are not testable.
+- Oracles that isolate syscall-filter mechanisms: `fd-kind` (an io_uring, userfaultfd,
+  perf_event, or BPF descriptor appeared), `namespace-change` (a process entered a new
+  namespace), and `key-created` (this user's key count rose).
+- Host preconditions: `userns-create`, `io-uring`, `userfaultfd`, `unprivileged-bpf`,
+  `unprivileged-perf` (each probed by a real syscall in a throwaway child, numbers from
+  libseccomp), plus `raw-socket` and `setuid-executable`. Preconditions are probed lazily,
+  once per process, and only for the selected cases.
+
+### Fixed
+
+- The process sampler now includes setuid processes (their `/proc/<pid>` is owned by root),
+  so `privilege-gain` can fire; the unconfined safety limit counts threads, which is what
+  `RLIMIT_NPROC` charges.
+- `resource-dos` with `measure: processes` compared all processes with `max_processes`; it now
+  counts the processes added beyond the tool's own, as the policy defines it. A correctly
+  enforced limit would otherwise have been scored as an escape.
+- Oracle configuration is validated through JSON, so list-valued settings work.
+- The holdout run record is `escape/holdout-runs.jsonl`; the old `.log` name was git-ignored.
+- Escape-case payloads are excluded from ruff and mypy: they are fixtures, and the holdout
+  ones are sealed by hash.
 - Escape-matrix harness additions:
   - unix-socket sinks (`network-sink` with `family: unix` or `unix-abstract`), standing in
     for a host service outside the sandbox;

@@ -1,0 +1,53 @@
+{
+  "id": "net-tcp-connect-002",
+  "category": "net-tcp-connect",
+  "description": "Connects over IPv6 to a TCP port the policy does not grant (another port is granted).",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "landlock-net",
+    "min_abi": 4
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {
+      "tcp_connect": [
+        9
+      ]
+    },
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "net-tcp-connect-002.py"
+  },
+  "oracle": {
+    "type": "network-sink",
+    "family": "ipv6",
+    "protocol": "tcp"
+  }
+}

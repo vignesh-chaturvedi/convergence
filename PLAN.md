@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 3 in progress: harness and controls built; attack cases pending · **Last updated:** 2026-11-12
+**Status:** Phase 3 in progress: harness, controls, 40 dev attacks; gate not yet met · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -414,9 +414,16 @@ initially-red baselines are to be built against that spec.
   baseline is red (`launcher-unavailable`) until `convergence run` exists. CI runs the
   validity gate (required) and the confined matrix (allowed to fail). Evidence is in
   `escape/results/`.
-- **Pending:** the attack cases themselves (≥ 45 dev, ≥ 20 holdout), written separately
-  against `escape/README.md`; their unconfined validity run; and sealing the holdout. The
-  exit gate is not met until then. The holdout being written separately from the runtime
+- **Review of the first attack corpus (2026-11-12):** its holdout was 25/26 byte-identical
+  to development cases (generated from the same templates), 7 of 48 development cases were
+  duplicates, and several oracles observed effects another layer would stop. Fixed on the
+  harness side: new oracles (`fd-kind`, `namespace-change`, `key-created`), new
+  preconditions, a generator that refuses duplicates and never produces a holdout, and a
+  `resource-dos` off-by-one. The development set is now 40 distinct cases (38 valid, 2 not
+  testable on the stock kernel).
+- **Pending for the exit gate:** at least 5 more distinct development techniques (including
+  `proc-other-pid`, which has none), and an independently written holdout of at least 20
+  cases replacing the current one, then sealing it and committing the validity runs. The holdout being written separately from the runtime
   makes the two more independent than one author doing both (ADR 0005).
 
 **Exit gate:** the case counts are met, 100% of attacks are proven to work unconfined, and

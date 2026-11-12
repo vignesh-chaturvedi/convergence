@@ -1,0 +1,49 @@
+{
+  "id": "resource-cpu-001",
+  "category": "resource-cpu",
+  "description": "Spins for 2.5 s of CPU time when the policy allows 1 s.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "rlimit + supervisor",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 15,
+      "cpu_seconds": 1
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "resource-cpu-001.py"
+  },
+  "oracle": {
+    "type": "resource-dos",
+    "measure": "cpu"
+  }
+}

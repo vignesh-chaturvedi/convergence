@@ -1,0 +1,52 @@
+{
+  "id": "tiocsti-injection-001",
+  "category": "tiocsti-injection",
+  "description": "Injects input into a terminal with TIOCSTI to make a reader signal the sentinel.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "seccomp (ioctl arg)",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "tiocsti-injection-001.py"
+  },
+  "oracle": {
+    "type": "process-signal"
+  },
+  "platforms": {
+    "requires": [
+      "legacy-tiocsti"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "net-raw-socket-001",
+  "category": "net-raw-socket",
+  "description": "Sends a hand-built UDP packet through a raw IPv4 socket.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "seccomp",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "net-raw-socket-001.py"
+  },
+  "oracle": {
+    "type": "network-sink",
+    "protocol": "udp"
+  },
+  "platforms": {
+    "requires": [
+      "raw-socket"
+    ]
+  }
+}

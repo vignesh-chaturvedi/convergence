@@ -57,6 +57,9 @@ module-name = "convergence"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Escape-case payloads are test fixtures, not project code: they are deliberately minimal
+# scripts, and the holdout ones are sealed by hash, so no tool may rewrite them.
+extend-exclude = ["escape/cases"]
 
 [tool.ruff.lint]
 select = [
@@ -81,6 +84,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 files = ["src", "tests", "escape"]
+exclude = ["^escape/cases/"]
 
 [tool.pytest.ini_options]
 minversion = "8.4"

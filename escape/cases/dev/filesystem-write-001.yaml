@@ -1,0 +1,47 @@
+{
+  "id": "filesystem-write-001",
+  "category": "filesystem-write",
+  "description": "Creates ${FORBIDDEN_PATH}, outside the write grants.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "landlock-fs",
+    "min_abi": 1
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "filesystem-write-001.py"
+  },
+  "oracle": {
+    "type": "canary-file-write"
+  }
+}

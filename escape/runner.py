@@ -9,7 +9,7 @@ usage:
     python -m escape.runner verify-holdout
 
 Sets: dev, holdout, controls, all (default: dev and controls). Holdout cases never run
-without --holdout-run, and every holdout run is logged to escape/holdout-runs.log.
+without --holdout-run, and every holdout run is logged to escape/holdout-runs.jsonl.
 
 Exit status: 0 if no case failed; 1 if any case escaped, was falsely denied, was invalid,
 errored, or could not run; 2 for usage or configuration problems.
@@ -27,6 +27,7 @@ import stat
 import sys
 import tempfile
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ from escape.expand import UnknownVariable, VarValue, expand, expand_string
 from escape.launchers import LAUNCHERS, ConvergenceLauncher, LaunchSpec, UnconfinedLauncher
 from escape.oracles import CaseDirs, Evidence, OracleConfigError, create
 from escape.oracles.base import scan_outputs
-from escape.preconditions import probe_all
+from escape.preconditions import Availability, Precondition, probe, probe_all
 from escape.procs import Sampler, become_subreaper, kill_all, reap_zombie_children
 from escape.report import CaseResult, Environment
 from escape.schema import Case, CaseError, load_dir
@@ -49,7 +50,7 @@ SETS = {
     "holdout": REPO / "escape" / "cases" / "holdout",
     "controls": REPO / "controls",
 }
-HOLDOUT_LOG = REPO / "escape" / "holdout-runs.log"
+HOLDOUT_LOG = REPO / "escape" / "holdout-runs.jsonl"
 LOADERS = ("/usr/lib/ld-linux-aarch64.so.1", "/lib64/ld-linux-x86-64.so.2")
 STDERR_TAIL = 600
 
@@ -84,14 +85,19 @@ def kernel_abi() -> int | None:
 
 class Runner:
     def __init__(
-        self, launcher: UnconfinedLauncher | ConvergenceLauncher, *, subreaper: bool = True
+        self,
+        launcher: UnconfinedLauncher | ConvergenceLauncher,
+        *,
+        subreaper: bool = True,
+        preconditions: Iterable[Precondition] = (),
     ) -> None:
         self.launcher = launcher
         self.abi = kernel_abi()
         self.python = _python()
         self._caps: Any = None
-        # Probed once, up front: some probes fork, which is only safe before threads start.
-        self.preconditions = probe_all()
+        # Probe what the selected cases need up front: some probes fork, which is only safe
+        # before threads start. Anything else is probed (and cached) on first use.
+        self.preconditions: dict[Precondition, Availability] = probe_all(preconditions)
         if subreaper:
             # Daemons that double-fork out of a run's session reparent here, so the persist
             # oracle can see them. Without this they would reparent to init and go unseen.
@@ -135,6 +141,9 @@ class Runner:
                 f"not for {os.uname().machine}",
             )
             return result
+        for name in case.platforms.requires:
+            if name not in self.preconditions:
+                self.preconditions[name] = probe(name)
         missing = [r for r in case.platforms.requires if not self.preconditions[r].available]
         if missing:
             details = "; ".join(f"{r}: {self.preconditions[r].detail}" for r in missing)
@@ -225,6 +234,7 @@ class Runner:
                 survivors=survivors,
                 overhead_processes=self.launcher.overhead_processes,
                 policy=policy,
+                max_keys=sampler.max_keys,
             )
             observation = oracle.check(dirs, evidence)
             reached = scan_outputs(reached_token, output, dirs.out) is not None
@@ -336,7 +346,8 @@ def _run(args: argparse.Namespace, launcher_name: str) -> int:
             return 2
 
     launcher = LAUNCHERS[launcher_name]()
-    runner = Runner(launcher, subreaper=not args.no_subreaper)
+    needed = {name for _, _, case in cases for name in case.platforms.requires}
+    runner = Runner(launcher, subreaper=not args.no_subreaper, preconditions=sorted(needed))
     environment = Environment.collect(launcher.name, runner.abi)
     results: list[CaseResult] = []
     for index, (set_name, path, case) in enumerate(cases, 1):

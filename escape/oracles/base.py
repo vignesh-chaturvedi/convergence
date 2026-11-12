@@ -8,6 +8,7 @@ able to obtain; it is never read as a claim.
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from abc import ABC, abstractmethod
@@ -70,6 +71,7 @@ class Evidence:
     survivors: list[StatLine]
     overhead_processes: int
     policy: Policy
+    max_keys: int | None = None  # this user's peak key count, when sampled
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +85,9 @@ class Oracle(ABC):
     config_model: ClassVar[type[BaseModel]] = NoConfig
 
     def __init__(self, config: dict[str, Any]) -> None:
-        self.config = self.config_model.model_validate(config)
+        # Validate through JSON, as cases and policies are: strict, but arrays are accepted
+        # where the configuration declares tuples.
+        self.config = self.config_model.model_validate_json(json.dumps(config))
 
     @abstractmethod
     def setup(self, dirs: CaseDirs) -> Setup: ...

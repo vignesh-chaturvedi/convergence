@@ -21,7 +21,7 @@ from typing import IO, Protocol
 
 from convergence.policy.model import Policy
 from escape.expand import expand_policy_variables
-from escape.procs import count_own_processes
+from escape.procs import count_own_tasks
 
 LIMITS_SCRIPT = Path(__file__).with_name("_limits.py")
 
@@ -180,7 +180,7 @@ def safety_limits(policy: Policy) -> dict[str, int]:
     half_ram = max(_mem_total_mib() // 2, 256) * MIB
     limits: dict[str, int] = {}
     processes = res.max_processes * SAFETY_FACTOR if res.max_processes else 512
-    limits["RLIMIT_NPROC"] = count_own_processes() + processes
+    limits["RLIMIT_NPROC"] = count_own_tasks() + processes
     limits["RLIMIT_DATA"] = min(
         res.memory_mb * SAFETY_FACTOR * MIB if res.memory_mb else half_ram, half_ram
     )

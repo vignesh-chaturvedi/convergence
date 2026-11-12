@@ -42,7 +42,7 @@ class ExecProbe(Oracle):
             self.marker = dirs.outside / "marker.sh"
             self.marker.write_text(f"#!/bin/sh\necho {self.secret}\n")
             self.marker.chmod(0o755)
-            return Setup(variables={"MARKER": str(self.marker)})
+            return Setup(variables={"MARKER": str(self.marker), "MARKER_DIR": str(dirs.outside)})
 
         source = next((Path(p).resolve() for p in SLEEP_CANDIDATES if os.path.exists(p)), None)
         if source is None:
@@ -52,7 +52,8 @@ class ExecProbe(Oracle):
         self.marker.chmod(0o755)
         self.identity = device_of(self.marker)
         return Setup(
-            variables={"MARKER": str(self.marker)}, sampler=SamplerOptions(marker=self.identity)
+            variables={"MARKER": str(self.marker), "MARKER_DIR": str(dirs.outside)},
+            sampler=SamplerOptions(marker=self.identity),
         )
 
     def check(self, dirs: CaseDirs, evidence: Evidence) -> Observation:

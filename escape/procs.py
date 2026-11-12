@@ -73,7 +73,10 @@ def own_processes() -> dict[int, StatLine]:
         if not entry.name.isdigit():
             continue
         try:
-            if entry.stat().st_uid != uid:
+            owner = entry.stat().st_uid
+            # /proc/<pid> is normally owned by the process's fsuid, which changes for a
+            # setuid executable. Check the real uid only for processes whose owner differs.
+            if owner != uid and _real_uid(int(entry.name)) != uid:
                 continue
         except OSError:
             continue
@@ -83,8 +86,34 @@ def own_processes() -> dict[int, StatLine]:
     return found
 
 
-def count_own_processes() -> int:
-    return sum(1 for line in own_processes().values() if line.alive)
+def _real_uid(pid: int) -> int | None:
+    try:
+        line = next(
+            item
+            for item in Path(f"/proc/{pid}/status").read_text().splitlines()
+            if item.startswith("Uid:")
+        )
+        return int(line.split()[1])
+    except (OSError, StopIteration, ValueError, IndexError):
+        return None
+
+
+def count_own_tasks() -> int:
+    """Count this user's threads, which Linux actually charges to RLIMIT_NPROC."""
+    uid = os.getuid()
+    total = 0
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != uid and _real_uid(int(entry.name)) != uid:
+                continue
+            tasks = os.scandir(f"/proc/{entry.name}/task")
+            total += sum(1 for task in tasks if task.name.isdigit())
+        except OSError:
+            # Processes can exit between the uid check and task enumeration.
+            continue
+    return total
 
 
 def read_status(pid: int) -> tuple[int | None, int | None]:
@@ -120,6 +149,65 @@ def maps_executable(pid: int, device: str, inode: int) -> bool:
         if len(parts) >= 5 and "x" in parts[1] and parts[3] == device and parts[4] == needle_inode:
             return True
     return False
+
+
+def anon_inodes(pid: int) -> set[str]:
+    """Kernel objects behind a process's anonymous-inode descriptors.
+
+    ``readlink /proc/<pid>/fd/<n>`` names them, for example ``anon_inode:[io_uring]``,
+    ``anon_inode:[userfaultfd]``, ``anon_inode:[perf_event]``, or ``anon_inode:bpf-map``.
+    """
+    found: set[str] = set()
+    try:
+        entries = os.listdir(f"/proc/{pid}/fd")
+    except OSError:
+        return found
+    for entry in entries:
+        try:
+            target = os.readlink(f"/proc/{pid}/fd/{entry}")
+        except OSError:
+            continue
+        if target.startswith("anon_inode:"):
+            found.add(target)
+    return found
+
+
+NAMESPACE_LINKS = (
+    "user",
+    "mnt",
+    "net",
+    "pid",
+    "pid_for_children",
+    "uts",
+    "ipc",
+    "cgroup",
+    "time",
+    "time_for_children",
+)
+
+
+def namespaces(pid: int | str) -> dict[str, str]:
+    """The namespace identities of a process, e.g. ``{"user": "user:[4026531837]"}``."""
+    found: dict[str, str] = {}
+    for name in NAMESPACE_LINKS:
+        try:
+            found[name] = os.readlink(f"/proc/{pid}/ns/{name}")
+        except OSError:
+            continue
+    return found
+
+
+def own_key_count() -> int | None:
+    """How many keys this user owns, from /proc/key-users (``uid: usage nkeys/nikeys ...``)."""
+    uid = os.getuid()
+    try:
+        for line in Path("/proc/key-users").read_text().splitlines():
+            owner, _, rest = line.partition(":")
+            if owner.strip() == str(uid):
+                return int(rest.split()[1].split("/")[0])
+    except (OSError, ValueError, IndexError):
+        return None
+    return 0
 
 
 def device_of(path: Path) -> tuple[str, int]:
@@ -160,6 +248,8 @@ class Peak:
     euids: set[int] = field(default_factory=set)
     cap_eff_nonzero: bool = False
     marker_mapped: bool = False
+    anon_inodes: set[str] = field(default_factory=set)
+    namespaces: dict[str, set[str]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -167,6 +257,9 @@ class SamplerOptions:
     status: bool = False  # read euid and CapEff (privilege oracle)
     fds: bool = False  # count descriptors (fd-exhaustion oracle)
     marker: tuple[str, int] | None = None  # (device, inode) to look for in executable maps
+    anon_inodes: bool = False  # record anonymous-inode descriptor kinds (fd-kind oracle)
+    namespaces: bool = False  # record namespace identities (namespace-change oracle)
+    keys: bool = False  # record this user's key count (key-created oracle)
     interval: float = 0.02
 
 
@@ -182,6 +275,7 @@ class Sampler:
         self.ticks = os.sysconf("SC_CLK_TCK")
         self.members: dict[Identity, Peak] = {}
         self.max_concurrent = 0
+        self.max_keys: int | None = None
         self.samples = 0
         self._stop = threading.Event()
         self._lock = threading.Lock()
@@ -250,6 +344,15 @@ class Sampler:
                 if self.options.marker and not peak.marker_mapped:
                     device, inode = self.options.marker
                     peak.marker_mapped = maps_executable(line.pid, device, inode)
+                if self.options.anon_inodes:
+                    peak.anon_inodes |= anon_inodes(line.pid)
+                if self.options.namespaces:
+                    for name, identity in namespaces(line.pid).items():
+                        peak.namespaces.setdefault(name, set()).add(identity)
+            if self.options.keys:
+                count = own_key_count()
+                if count is not None:
+                    self.max_keys = count if self.max_keys is None else max(self.max_keys, count)
 
     def alive_members(self, *, excluding_root: bool) -> list[StatLine]:
         procs = own_processes()

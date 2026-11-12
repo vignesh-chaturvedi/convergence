@@ -1,0 +1,1 @@
+{"arch": "x86_64", "commit": "d9633333a402d1c734522679a5c00ba1436954b1+uncommitted", "counts": {"not-testable": 1, "valid": 25}, "escape_rate": "n/a (nothing counted)", "kernel": "7.0.0-1013-oracle", "landlock_abi": 8, "launcher": "unconfined", "timestamp": "2026-11-12T03:01:59+00:00"}

@@ -1,0 +1,48 @@
+{
+  "id": "net-udp-001",
+  "category": "net-udp",
+  "description": "Sends a UDP datagram although the policy grants no UDP at all.",
+  "expect": {
+    "verdict": "blocked",
+    "mechanism": "seccomp (socket type)",
+    "min_abi": 0
+  },
+  "policy": {
+    "version": 1,
+    "filesystem": {
+      "read": [
+        "/usr",
+        "/etc/ld.so.cache",
+        "${WORKDIR}"
+      ],
+      "write": [
+        "${OUT_DIR}",
+        "/dev/null"
+      ],
+      "execute": [
+        "${PYTHON}",
+        {
+          "path": "${LOADER}",
+          "optional": true
+        }
+      ]
+    },
+    "network": {},
+    "resources": {
+      "wall_clock_seconds": 30
+    },
+    "environment": {
+      "set": {
+        "PATH": "/usr/bin:/bin",
+        "LANG": "C.UTF-8"
+      }
+    }
+  },
+  "payload": {
+    "file": "net-udp-001.py"
+  },
+  "oracle": {
+    "type": "network-sink",
+    "protocol": "udp"
+  }
+}

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from escape.oracles.base import CaseDirs, Evidence, Observation, Oracle, Setup
 from escape.oracles.execution import ExecProbe
 from escape.oracles.files import CanaryDelete, CanaryFileRead, CanaryFileWrite, WorkloadOutput
+from escape.oracles.kernel_objects import FdKindOracle, KeyCreated, NamespaceChange
 from escape.oracles.leaks import EnvLeak, FdLeak
 from escape.oracles.network import NetworkSink, ServerReachable
 from escape.oracles.process import Persist, PrivilegeGain, ProcessRead, ProcessSignal
@@ -30,6 +31,9 @@ ORACLES: dict[str, type[Oracle]] = {
         FdLeak,
         ResourceDos,
         ExecProbe,
+        FdKindOracle,
+        NamespaceChange,
+        KeyCreated,
     )
 }
 

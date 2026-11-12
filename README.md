@@ -120,6 +120,29 @@ runtime noise, so the import is partial: merge a runtime baseline (`--baseline`)
 policy fails closed on the interpreter's own paths. Decoys, secrets, and blocked attempts
 are never granted.
 
+## For agents: `convergence mcp`
+
+```bash
+pip install 'convergence-sandbox[mcp]'
+convergence mcp --policies ./policies     # stdio; clients name a policy in that directory
+```
+
+The server offers four tools:
+- `run_sandboxed(command, policy, timeout_s?, cwd?, trace?)`;
+- `check_policy(policy)`;
+- `generate_policy(observation)`;
+- `explain_denials(run_id)`.
+
+**The operator chooses the policies, not the agent.** A client can only name one from
+`--policies`, unless the server is started with `--allow-inline-policy`. Commands are argv
+lists and never go through a shell. `observe`, which runs commands unconfined, exists only
+with `--allow-observe` ([ADR 0010](docs/adr/0010-mcp-server.md)).
+
+Every call goes through a single-threaded spawn helper that has its modules already loaded.
+On the development VM, `run_sandboxed` of `/usr/bin/true` takes 9.5 ms at the median, against
+127 ms for a cold `convergence run`
+([numbers](benchmarks/results/mcp-latency-lima-ubuntu-24.04-ga-aarch64.md)).
+
 ## Policies: `validate` and `explain`
 
 A policy lists what a tool may do. Everything else is denied

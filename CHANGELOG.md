@@ -8,6 +8,19 @@ All notable changes to this project are recorded here. The format follows
 
 ### Added
 
+- `convergence mcp` (ADR 0010), an MCP server over stdio. It needs the optional
+  `convergence-sandbox[mcp]` extra (`mcp` 2.3.0).
+  - Tools: `run_sandboxed`, `check_policy`, `generate_policy`, `explain_denials`, and
+    `observe` only with `--allow-observe`.
+  - Policies come from the operator (`--policies DIR`); clients may send policy text only
+    with `--allow-inline-policy`.
+  - Commands are argv lists and never go through a shell.
+  - Runs go through a single-threaded spawn helper that has its modules already loaded.
+- `benchmarks/mcp_latency.py`: `run_sandboxed` of `/usr/bin/true` takes 9.5 ms at the
+  median on the development VM, against 127 ms for a cold `convergence run`.
+- `escape/mcp_client.py` and the `mcp` launcher: escape cases through the MCP path; 8
+  development attacks are tested that way.
+
 - `convergence explain --run ID`: for each denial in a traced run, the cause, the rule that
   decided it, the smallest policy change that would permit it (a YAML diff), and a risk
   note. Never applies anything.

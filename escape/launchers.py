@@ -332,3 +332,28 @@ class PolicyLauncher:
         argv = [sys.executable, "-m", "convergence", "run", "--no-record"]
         argv += ["--policy", str(self.policy), "--", *_expanded_argv(spec)]
         return _start(argv, spec, dict(spec.supervisor_env), deadline=wall + 15)
+
+
+class MCPLauncher:
+    """The case through ``convergence mcp``'s ``run_sandboxed`` (escape/mcp_client.py).
+
+    Per-process measurements would include the client, server, helper, and worker, so the
+    resource cases are not run this way.
+    """
+
+    name = "mcp"
+    overhead_processes = 4  # the client, the server, the spawn helper, and the worker
+
+    def unavailable_reason(self) -> str | None:
+        try:
+            import mcp  # noqa: F401
+        except ImportError:
+            return "the mcp SDK is not installed"
+        return None
+
+    def start(self, spec: LaunchSpec) -> Running:
+        wall = spec.policy.resources.wall_clock_seconds
+        client = Path(__file__).with_name("mcp_client.py")  # runs anywhere; needs only the SDK
+        argv = [sys.executable, str(client), "--policy", str(spec.policy_path)]
+        argv += ["--", *spec.argv]
+        return _start(argv, spec, dict(spec.supervisor_env), deadline=wall + 30)

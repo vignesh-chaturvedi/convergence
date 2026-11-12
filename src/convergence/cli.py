@@ -286,6 +286,22 @@ def _generate(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _mcp(args: argparse.Namespace) -> int:
+    try:
+        from convergence.mcp.server import Config, main
+    except ImportError as exc:
+        _say(
+            f"the MCP server needs the optional SDK: pip install 'convergence-sandbox[mcp]' ({exc})"
+        )
+        return EXIT_USAGE
+    config = Config(
+        policies=Path(args.policies).resolve() if args.policies else None,
+        allow_inline_policy=args.allow_inline_policy,
+        allow_observe=args.allow_observe,
+    )
+    return main(config)
+
+
 def _report_denials(record: RunRecord) -> None:
     tracing = record.tracing
     if tracing.requested and not tracing.active:
@@ -504,6 +520,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--divergence-commit", metavar="SHA", help="record the Divergence commit as provenance"
     )
     divergence.set_defaults(handler=_import_divergence)
+
+    mcp = commands.add_parser(
+        "mcp",
+        help="serve Convergence's tools over MCP (stdio)",
+        description=(
+            "Serve run_sandboxed, check_policy, generate_policy, and explain_denials over the "
+            "Model Context Protocol on stdio (ADR 0010). Policies come from the operator: "
+            "clients name one from --policies DIR. --allow-inline-policy also lets clients "
+            "send policy text; --allow-observe adds the observe tool, which runs commands "
+            "unconfined."
+        ),
+    )
+    mcp.add_argument("--policies", metavar="DIR", help="directory of policies clients may name")
+    mcp.add_argument(
+        "--allow-inline-policy",
+        action="store_true",
+        help="let clients send their own policy text (trusted clients only)",
+    )
+    mcp.add_argument(
+        "--allow-observe",
+        action="store_true",
+        help="add the observe tool, which runs commands UNCONFINED",
+    )
+    mcp.set_defaults(handler=_mcp)
     return parser
 
 

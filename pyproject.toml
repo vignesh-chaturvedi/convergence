@@ -34,12 +34,18 @@ Changelog = "https://github.com/vignesh-chaturvedi/convergence/blob/main/CHANGEL
 [project.scripts]
 convergence = "convergence.cli:main"
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2.3.0",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=1.18",
     "pytest>=8.4",
     "ruff>=0.14",
     "types-pyyaml>=6.0.12",
+    "mcp>=2.3.0",
 ]
 
 [build-system]
@@ -83,7 +89,7 @@ select = [
 python_version = "3.12"
 strict = true
 warn_unreachable = true
-files = ["src", "tests", "escape"]
+files = ["src", "tests", "escape", "benchmarks"]
 exclude = ["^escape/cases/", "^tests/fixtures/"]
 
 [tool.pytest.ini_options]

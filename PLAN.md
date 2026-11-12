@@ -1,6 +1,6 @@
 # Convergence — Build Plan
 
-**Status:** Phase 5 done (exit gate met); Phase 6 next · **Last updated:** 2026-11-12
+**Status:** Phase 6 done (exit gate met); Phase 7 next · **Last updated:** 2026-11-12
 
 Convergence runs AI agent tools (MCP servers, agent skills, model-generated scripts) under a
 least-privilege policy that the Linux kernel enforces (Landlock + seccomp-bpf + resource
@@ -608,7 +608,30 @@ the importer passes on real Divergence output.
 - Tests: an in-memory client session, a stdio end-to-end test with the SDK client, and a
   subset of the escape matrix run through the MCP path.
 
+**Progress (Phase 6):**
+- **SDK:** `mcp` 2.3.0, as an optional extra (`convergence-sandbox[mcp]`). In 2.x `FastMCP`
+  is `MCPServer`, served with `run_stdio_async()`. Its `Client` connects in memory or over
+  stdio.
+- **`convergence mcp` built (2026-11-12), ADR 0010.** One change from the plan above: the
+  operator chooses the policies.
+  - Clients name one from `--policies DIR`. Policy text is accepted only with
+    `--allow-inline-policy`, and the server refuses to start with neither.
+  - Observation and run ids, not file paths, select saved files.
+  - The tools refuse with readable messages (the SDK's `ToolError`).
+- **Spawn helper:** a fresh, single-threaded interpreter that forks a worker per call. The
+  worker takes its stdin from `/dev/null` and sends its stdout to stderr, so nothing reaches
+  the protocol.
+  - The first measurement found each worker re-importing Convergence, at 89 ms per call.
+  - Importing once in the helper brought it to 9.5 ms at the median (p95 13 ms) for
+    `/usr/bin/true`, against 127 ms for the cold CLI.
+- **Tests:**
+  - in memory, with the SDK client;
+  - over stdio, end to end, including a traced run and `explain_denials`;
+  - 8 development attacks through the full MCP path (client, server, helper, worker,
+    sandbox), all blocked.
+
 **Exit gate:** all four tools work from a real MCP client, and per-call latency is recorded.
+**Met:** both, above.
 
 ### Phase 7 — Benchmarks (Milestone 7)
 
@@ -701,6 +724,6 @@ from the results.
 | 3 | Threat model, escape matrix, controls | done | see git log | |
 | 4 | Runtime enforcement and holdout | done | see git log | |
 | 5 | Observe, generate, importer, denial explain | done | see git log | |
-| 6 | MCP server | not started | | |
+| 6 | MCP server | done | see git log | |
 | 7 | Benchmarks | not started | | |
 | 8 | PyPI release | not started | | |

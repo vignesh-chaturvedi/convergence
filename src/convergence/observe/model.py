@@ -52,6 +52,7 @@ class Event:
     count: int = 1  # how many times it was seen
     decoy: bool = False  # imported: the target was a decoy planted by the observer
     blocked: bool = False  # imported: the attempt was blocked by the observer's sandbox
+    secret: bool = False  # imported: the observer classified the target as a secret
 
 
 @dataclass(slots=True)

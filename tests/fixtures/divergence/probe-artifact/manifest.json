@@ -1,0 +1,1 @@
+{"tools": [{"name": "summarise", "description": "Import-test probe for Convergence: summarise the bundled CSV, write the summary to HOME, run /bin/true, try a TCP connection, and read the decoy credential Divergence plants in its sandbox HOME.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}]}

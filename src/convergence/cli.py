@@ -221,6 +221,41 @@ def _observe(args: argparse.Namespace) -> int:
     return code
 
 
+def _import_divergence(args: argparse.Namespace) -> int:
+    import json
+
+    from convergence.importers.divergence import ImportError_, import_divergence
+    from convergence.observe.model import load
+    from convergence.runtime.record import runs_dir
+
+    source = Path(args.report)
+    try:
+        data = json.loads(source.read_text())
+        baseline = load(args.baseline) if args.baseline else None
+        observation = import_divergence(
+            source, data, baseline=baseline, divergence_commit=args.divergence_commit
+        )
+    except (OSError, ValueError, ImportError_) as exc:
+        _say(f"{args.report}: {exc}")
+        return EXIT_FAILED
+    target = (
+        Path(args.out)
+        if args.out
+        else runs_dir().parent / "observations" / f"{observation.id}.json"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target.write_text(observation.to_json() + "\n")
+    flagged = sum(1 for e in observation.events if e.decoy or e.secret or e.blocked)
+    _say(
+        f"imported {len(observation.events)} events from {len(observation.command)} report(s); "
+        f"{flagged} are decoys, secrets, or blocked attempts and will never be granted"
+    )
+    for warning in observation.warnings:
+        _say(f"warning: {warning}")
+    _say(f"observation (partial) saved to {target}; next: convergence generate --from {target}")
+    return EXIT_OK
+
+
 def _generate(args: argparse.Namespace) -> int:
     from convergence.generate.policy import generate, render
     from convergence.observe.model import load
@@ -442,6 +477,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="allow only the syscalls observed (stricter, and fails on any new code path)",
     )
     gen.set_defaults(handler=_generate)
+
+    importer = commands.add_parser(
+        "import",
+        help="turn another tool's report into an observation",
+        description="Turn another tool's report into an observation for `generate`.",
+    )
+    sources = importer.add_subparsers(dest="source", metavar="<source>", required=True)
+    divergence = sources.add_parser(
+        "divergence",
+        help="a Divergence dynamic-tier report (divergence.sandbox/1 or `scan --json`)",
+        description=(
+            "Import what Divergence's dynamic tier observed. The result is always partial: "
+            "Divergence drops runtime noise on purpose and caps its observations. Decoys, "
+            "secrets, and blocked attempts are kept but never granted. Merge a runtime "
+            "baseline that Convergence observed itself (--baseline), or the generated policy "
+            "will fail closed on the interpreter's own paths."
+        ),
+    )
+    divergence.add_argument("report", help="divergence.sandbox/1 report or scan --json output")
+    divergence.add_argument(
+        "--baseline", metavar="OBS", help="an observation of the runtime to merge (recommended)"
+    )
+    divergence.add_argument("--out", metavar="FILE", help="where to write the observation")
+    divergence.add_argument(
+        "--divergence-commit", metavar="SHA", help="record the Divergence commit as provenance"
+    )
+    divergence.set_defaults(handler=_import_divergence)
     return parser
 
 

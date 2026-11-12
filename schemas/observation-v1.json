@@ -123,6 +123,11 @@
           "title": "Result",
           "type": "string"
         },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        },
         "syscall": {
           "default": "",
           "title": "Syscall",

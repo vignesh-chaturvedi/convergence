@@ -132,6 +132,10 @@ class _Generator:
         )
 
     def absolute(self, path: str) -> str:
+        if path.startswith("${HOME}") and self.home:
+            path = self.home + path[len("${HOME}") :]
+        if path.startswith("${"):
+            return path
         return os.path.normpath(path if path.startswith("/") else os.path.join(self.cwd, path))
 
     def proc(self, event: Event, path: str) -> str | None:
@@ -172,15 +176,22 @@ class _Generator:
                 )
             return
         path = self.absolute(event.path)
-        if event.decoy or event.blocked:
-            self.warnings.append(
-                f"{event.id}: {event.op} {path} was a decoy or blocked; not granted"
-            )
+        if event.decoy or event.blocked or event.secret:
+            what = "a decoy" if event.decoy else "a secret" if event.secret else "blocked"
+            self.warnings.append(f"{event.id}: {event.op} {path} was {what}; never granted")
             return
         if self.credential(path):
             self.warnings.append(
                 f"{event.id}: {event.op} {path} is a credential location; never granted"
             )
+            return
+        if path.startswith("${SCRATCH}"):
+            # Only ${SCRATCH} itself can be granted (docs/policy.md): any use needs write on it.
+            self.dir_needs[("write", "${SCRATCH}")].append(event.id)
+            self.notes[("write", "${SCRATCH}")] = "the tool's private temporary directory"
+            return
+        if path.startswith("${"):
+            self.warnings.append(f"{event.id}: {event.op} {path} has no host path; not granted")
             return
         if path.startswith("/proc/"):
             mapped = self.proc(event, path)
@@ -203,7 +214,7 @@ class _Generator:
     def exec_event(self, event: Event) -> None:
         if event.result != "ok" or event.path is None:
             return
-        if event.blocked or event.decoy:
+        if event.blocked or event.decoy or event.secret:
             self.warnings.append(f"{event.id}: exec of {event.path} was blocked; not granted")
             return
         path = os.path.realpath(self.absolute(event.path))
@@ -276,7 +287,7 @@ class _Generator:
         for event in self.obs.events:
             if event.kind != "net":
                 continue
-            if event.decoy or event.blocked:
+            if event.decoy or event.blocked or event.secret:
                 self.warnings.append(f"{event.id}: network attempt was blocked; not granted")
                 continue
             if event.protocol == "unix":
@@ -351,11 +362,13 @@ def _minimise(grants: list[_Grant]) -> list[_Grant]:
 def generate(observation: Observation, *, allow_list: bool = False) -> Generated:
     gen = _Generator(observation)
     if not observation.complete:
+        first = observation.limitations[0] if observation.limitations else observation.source
+        more = len(observation.limitations) - 1
         gen.warnings.insert(
             0,
-            "the observation is incomplete ("
-            + ("; ".join(observation.limitations) or observation.source)
-            + "); the policy will fail closed on anything it missed",
+            f"the observation is incomplete: {first}"
+            + (f" (+{more} more noted in the observation)" if more > 0 else "")
+            + "; the policy will fail closed on anything it missed",
         )
     for event in observation.events:
         if event.kind == "file":
@@ -367,7 +380,7 @@ def generate(observation: Observation, *, allow_list: bool = False) -> Generated
     for grant in sorted(grants, key=lambda g: (BUCKETS.index(g.bucket), g.path)):
         value = gen.portable(grant.path)
         entry: Any = value
-        if not os.path.exists(grant.path) and not grant.path.startswith("/proc/self"):
+        if not grant.path.startswith(("/proc/self", "${")) and not os.path.exists(grant.path):
             entry = {"path": value, "optional": True}
             gen.warnings.append(
                 f"{value} did not exist when the policy was generated; marked optional"
@@ -397,6 +410,17 @@ def generate(observation: Observation, *, allow_list: bool = False) -> Generated
 
     resources = _resources(observation, gen.reasons)
     passed = [name for name in PASSED_ENVIRONMENT if name in observation.environment_names]
+    environment: dict[str, Any] = {"pass": passed}
+    if "${SCRATCH}" in filesystem["write"]:
+        environment["set"] = {"TMPDIR": "${SCRATCH}"}
+        gen.reasons.append(
+            Reason(
+                "environment.set",
+                "TMPDIR",
+                [],
+                "the tool used a private temporary directory; point TMPDIR at ${SCRATCH}",
+            )
+        )
     gen.reasons.append(
         Reason(
             "environment.pass",
@@ -417,7 +441,7 @@ def generate(observation: Observation, *, allow_list: bool = False) -> Generated
         "network": network,
         "syscalls": syscalls,
         "resources": resources,
-        "environment": {"pass": passed},
+        "environment": environment,
     }
     return Generated(
         policy, gen.reasons, _dedupe(gen.warnings), observation.id, observation.complete
@@ -526,7 +550,7 @@ def render(generated: Generated) -> str:
                 comment = f"  # {reason.why}{_ids(reason.events)}" if reason else ""
                 lines.append(f"    - {port}{comment}")
     else:
-        lines.append("network: {}  # no network use observed")
+        lines.append("network: {}  # nothing to grant (see the warnings for refused attempts)")
     syscalls = policy["syscalls"]
     if syscalls["mode"] == "allow-list":
         lines += [
@@ -546,6 +570,13 @@ def render(generated: Generated) -> str:
     lines.append("environment:")
     lines.append("  # environment reads cannot be observed; standard variables are passed")
     lines.append(f"  pass: {json.dumps(policy['environment']['pass'])}")
+    values = policy["environment"].get("set", {})
+    if values:
+        for name in values:
+            reason = reasons.get(("environment.set", name))
+            if reason is not None:
+                lines.append(f"  # {name}: {reason.why}")
+        lines.append(f"  set: {json.dumps(values)}")
     text = "\n".join(lines) + "\n"
     parse_policy(text, source="generated policy")  # never emit an invalid policy
     return text

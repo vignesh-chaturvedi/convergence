@@ -1,0 +1,98 @@
+{
+  "schema": "divergence.sandbox/1",
+  "runner_version": "1.1.0",
+  "capabilities": [
+    "fs_delete",
+    "fs_read",
+    "fs_write",
+    "net_outbound",
+    "proc_spawn",
+    "secrets_read"
+  ],
+  "observations": [
+    {
+      "capability": "fs_read",
+      "syscall": "openat",
+      "target": "/home/user/divergence-probe/artifact/data.csv",
+      "decoy": false,
+      "succeeded": true,
+      "result": 3
+    },
+    {
+      "capability": "fs_write",
+      "syscall": "openat",
+      "target": "/tmp/divergence-overlay-68219-1794478629813805150-0/scratch/mh75ppph",
+      "decoy": false,
+      "succeeded": true,
+      "result": 3
+    },
+    {
+      "capability": "fs_delete",
+      "syscall": "unlinkat",
+      "target": "/tmp/divergence-overlay-68219-1794478629813805150-0/scratch/mh75ppph",
+      "decoy": false,
+      "succeeded": true,
+      "result": 0
+    },
+    {
+      "capability": "fs_write",
+      "syscall": "openat",
+      "target": "/tmp/divergence-overlay-68219-1794478629813805150-0/scratch/summary.txt",
+      "decoy": false,
+      "succeeded": true,
+      "result": 3
+    },
+    {
+      "capability": "proc_spawn",
+      "syscall": "execve",
+      "target": "/bin/true",
+      "decoy": false,
+      "succeeded": true,
+      "result": 0
+    },
+    {
+      "capability": "net_outbound",
+      "syscall": "connect",
+      "target": "127.0.0.1:443",
+      "decoy": false,
+      "succeeded": false,
+      "result": -1
+    },
+    {
+      "capability": "secrets_read",
+      "syscall": "openat",
+      "target": "/tmp/divergence-overlay-68219-1794478629813805150-0/home/.ssh/id_rsa",
+      "decoy": true,
+      "succeeded": true,
+      "result": 3
+    }
+  ],
+  "coverage": {
+    "syscalls_observed": 1507,
+    "observations_dropped": 0,
+    "entrypoints_invoked": 2,
+    "entrypoints_completed": 2,
+    "entrypoints_failed": 0,
+    "confinement_enforced": true,
+    "exited_cleanly": true,
+    "exit_code": 0,
+    "timed_out": false
+  },
+  "evidence": {
+    "fs_delete": "unlinkat(/tmp/divergence-overlay-68219-1794478629813805150-0/scratch/mh75ppph) -> 0",
+    "fs_read": "openat(/home/user/divergence-probe/artifact/data.csv) -> 3",
+    "fs_write": "openat(/tmp/divergence-overlay-68219-1794478629813805150-0/scratch/mh75ppph) -> 3",
+    "net_outbound": "connect(127.0.0.1:443) -> -1 (blocked/failed)",
+    "proc_spawn": "execve(/bin/true) -> 0",
+    "secrets_read": "openat(/tmp/divergence-overlay-68219-1794478629813805150-0/home/.ssh/id_rsa) -> 3"
+  },
+  "limitations": [
+    "env_read is not observable via syscalls; absence is never evidence of no access",
+    "the current driver executes Python artifacts only; non-Python entrypoints are not covered",
+    "driver coverage metadata is emitted in-process and is not tamper-proof against a malicious artifact",
+    "decoys are exposed through the sanitized HOME; hardcoded host credential paths are denied and reported as attempts, not remapped to decoys",
+    "clone3 returns ENOSYS to prevent CLONE_UNTRACED escape; runtimes may fall back to the traced clone syscall",
+    "no PID namespace is used; descendants are instead traced, resource-limited, placed in a private session, and killed with their supervisor",
+    "network namespace unavailable (EPERM: Operation not permitted); Landlock v4 and seccomp still deny all network egress/listening"
+  ]
+}

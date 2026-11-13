@@ -1,6 +1,7 @@
 # Security review of Convergence 0.1.0
 
 **Date:** 2026-11-12. **Reviewed:** tag `v0.1.0` (commit `5733ecb`), all of `src/convergence`.
+**Fixed in:** 0.1.1.
 
 **This is not an independent audit.** The review was done inside the project, by the same
 hands that wrote the code. It found real weaknesses, which is a reason to expect that an
@@ -197,7 +198,7 @@ in [THREAT_MODEL.md](../THREAT_MODEL.md) and the README.
 
 ## Recommended next steps
 
-1. **Release the fixes** as 0.1.1, and say in the release notes that 0.1.0 is affected.
+1. **Use 0.1.1 or later.** 0.1.0 has all seven weaknesses.
 2. **Add matrix cases** for each finding, then run and publish the matrix again. Use these
    techniques when the next holdout is written.
 3. **Protect the supervisor below ABI 6.** seccomp could deny signals aimed at it, which

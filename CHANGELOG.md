@@ -6,11 +6,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-13
+
+A security release. **0.1.0 is affected by every weakness below: upgrade.**
+
 ### Security
 
 A security review of 0.1.0 ([docs/security-review.md](docs/security-review.md)) found the
 weaknesses below. Each was reproduced on stock Ubuntu 24.04, fixed, and given a regression
-test. **0.1.0 is affected by all of them.**
+test.
 
 - **TCP port grants could be bypassed with TCP fast open.** Sending with `MSG_FASTOPEN`
   connects a socket without Landlock's port check. A policy that granted any TCP port let
@@ -38,6 +42,12 @@ test. **0.1.0 is affected by all of them.**
 - Stop signals are blocked across the supervisor's forks.
 - MCP policy names and run ids must match exactly; a trailing newline is no longer accepted.
 - THREAT_MODEL.md describes the software as built, and lists what the review could not fix.
+- The benchmarks were measured again for this release.
+
+### Fixed
+
+- `convergence doctor`'s TCP probe could pick the same port twice and then report a
+  failure. Its two bind ports are now always different.
 
 ## [0.1.0] - 2026-11-12
 

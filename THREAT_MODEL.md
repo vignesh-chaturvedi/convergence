@@ -2,9 +2,10 @@
 
 > **Status:** this describes Convergence as built. The defended claims are measured by the
 > escape matrix and the test suite, on real kernels. A security review after 0.1.0 found
-> weaknesses the matrix had not covered; they are fixed, and what could not be fixed is
-> listed below. The review is in [docs/security-review.md](docs/security-review.md). Nothing
-> here has been independently audited.
+> weaknesses the matrix had not covered; they are fixed in 0.1.1, and what could not be
+> fixed is listed below. The review is in
+> [docs/security-review.md](docs/security-review.md). Nothing here has been independently
+> audited.
 
 Convergence runs an AI agent tool — an MCP server, an agent skill, or a model-generated
 script — under a least-privilege policy enforced by the Linux kernel (Landlock,

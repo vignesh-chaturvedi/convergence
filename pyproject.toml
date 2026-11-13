@@ -1,6 +1,6 @@
 [project]
 name = "convergence-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 description = "Least-privilege sandboxing for AI agent tools on Linux: Landlock and seccomp policies generated from observed behaviour."
 readme = "README.md"
 requires-python = ">=3.12"

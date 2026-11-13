@@ -12,11 +12,10 @@ It is the companion to [Divergence](https://github.com/vignesh-chaturvedi/diverg
 Divergence reports the gap between what an MCP server declares and what it does;
 Convergence contains what it does.
 
-> **Status: 0.1.0, the first release.** Every claim below comes from tests and measurements
-> in this repository, on real kernels. A [security review](docs/security-review.md) after
-> the release found seven weaknesses in 0.1.0; they are fixed on `main`. Nothing here has
-> been independently audited. Do not make it your only protection for code you do not
-> trust.
+> **Status: 0.1.1.** Every claim below comes from tests and measurements in this
+> repository, on real kernels. A [security review](docs/security-review.md) found seven
+> weaknesses in 0.1.0. All are fixed in 0.1.1, so do not use 0.1.0. Nothing here has been
+> independently audited. Do not make it your only protection for code you do not trust.
 
 ## Quickstart
 
@@ -113,7 +112,7 @@ Every escape is the dynamic-loader limitation above.
 **What the matrix missed.** A [security review](docs/security-review.md) after 0.1.0 found
 seven weaknesses that no matrix case covered. The most serious let a tool reach TCP ports
 the policy did not grant, and outlive the wall-clock limit by forking. All seven are fixed
-on `main` and have regression tests. None has a matrix case yet, so the rates above do not
+in 0.1.1 and have regression tests. None has a matrix case yet, so the rates above do not
 count them.
 
 **False denials**, on 10 benign workloads: git, tar, sqlite, an HTTP client and server,

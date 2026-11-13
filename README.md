@@ -134,21 +134,26 @@ Generated from [`benchmarks/results/lima-ubuntu-24.04-ga-aarch64.json`](benchmar
 
 | Configuration | `true` p50 (p95) ms | `python` p50 (p95) ms | `wordcount` p50 (p95) ms |
 |---|---:|---:|---:|
-| no sandbox (`subprocess`) | 0.21 (0.27) | 7.72 (8.91) | 16.65 (18.48) |
-| `sudo -n true` (inside every Docker row) | 2.64 (3.74) | 2.6 (3.19) | 2.66 (3.84) |
-| Convergence, library API, warm | 7.89 (10.62) | 16.41 (21.06) | 26.83 (32.78) |
-| Convergence, library API, warm, `--trace` | 23.09 (26.58) | 67.03 (74.55) | 82.47 (92.23) |
-| Convergence, one MCP `run_sandboxed` call | 8.64 (11.03) | 16.84 (20.41) | 26.6 (34.02) |
-| Convergence CLI, cold process | 114.37 (127.58) | 122.65 (135.06) | 132.79 (147.29) |
+| no sandbox (`subprocess`) | 0.2 (0.3) | 7.86 (8.63) | 16.84 (21.81) |
+| `sudo -n true` (inside every Docker row) | 2.59 (3.26) | 2.6 (3.43) | 2.6 (3.99) |
+| Convergence, library API, warm | 8.66 (11.26) | 20.4 (61.47) | 26.95 (78.61) |
+| Convergence, library API, warm, `--trace` | 23.28 (25.59) | 68.44 (104.56) | 84.95 (94.07) |
+| Convergence, one MCP `run_sandboxed` call | 10.07 (13.96) | 18.38 (23.48) | 28.53 (41.1) |
+| Convergence CLI, cold process | 119.65 (136.88) | 128.58 (147.85) | 139.1 (177.02) |
 | bubblewrap | n/a | n/a | n/a |
-| `docker run --rm`, warm | 106.64 (139.13) | 116.17 (139.36) | 138.15 (171.59) |
-| `docker run --rm`, cold daemon and cache | 151.08 (200.74) | 161.39 (193.82) | 195.47 (348.86) |
+| `docker run --rm`, warm | 115.55 (200.73) | 124.23 (159.5) | 170.89 (275.27) |
+| `docker run --rm`, cold daemon and cache | 217.97 (466.63) | 284.86 (829.34) | 208.95 (381.71) |
 
 n/a: bwrap cannot run here: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
 <!-- benchmarks:end -->
 
 - **What the rows include.** Each Docker row includes `sudo`, which has its own row. The
   cold CLI row includes starting Python.
+- **This run** was measured on 0.1.1 while the host was busy with other work. Every row,
+  Docker's too, is slower and has a longer tail than in the
+  [0.1.0 run](https://github.com/vignesh-chaturvedi/convergence/blob/v0.1.0/README.md#what-it-costs).
+  Run in turns on the same machine, 0.1.1 took a few tenths of a millisecond longer than
+  0.1.0 to start `true`, and no measurable time longer to start `python`.
 - **A warm call**, through the library API or MCP, costs one fork and the sandbox setup.
 - **bubblewrap** cannot run unprivileged on stock Ubuntu 24.04, on the VM or on GitHub's
   runner: AppArmor restricts the user namespaces it needs.

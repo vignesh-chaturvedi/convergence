@@ -9,12 +9,12 @@
     "arch": "aarch64",
     "os": "Ubuntu 24.04.4 LTS",
     "python": "3.12.3",
-    "convergence": "0.1.0.dev0",
-    "commit": "15352948b008b451255183d496754da2ab8db332+uncommitted",
+    "convergence": "0.1.1",
+    "commit": "f4fcc8eb937b2e5e79437cdf81238eb8f09c02b8",
     "strace": "strace -- version 6.8",
     "bwrap": "bubblewrap 0.9.0",
     "docker": "29.1.3",
-    "timestamp": "2026-11-12T11:50:54Z"
+    "timestamp": "2026-11-13T03:37:51Z"
   },
   "image": "python@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b",
   "method": {
@@ -26,157 +26,157 @@
     "bare": {
       "true": {
         "runs": 200,
-        "p50_ms": 0.21,
-        "p95_ms": 0.27,
-        "p99_ms": 0.78,
-        "mean_ms": 0.23,
+        "p50_ms": 0.2,
+        "p95_ms": 0.3,
+        "p99_ms": 0.64,
+        "mean_ms": 0.22,
         "stdev_ms": 0.1
       },
       "python": {
         "runs": 200,
-        "p50_ms": 7.72,
-        "p95_ms": 8.91,
-        "p99_ms": 9.44,
-        "mean_ms": 7.89,
-        "stdev_ms": 0.43
+        "p50_ms": 7.86,
+        "p95_ms": 8.63,
+        "p99_ms": 9.92,
+        "mean_ms": 7.99,
+        "stdev_ms": 0.4
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 16.65,
-        "p95_ms": 18.48,
-        "p99_ms": 23.46,
-        "mean_ms": 17.01,
-        "stdev_ms": 1.57
+        "p50_ms": 16.84,
+        "p95_ms": 21.81,
+        "p99_ms": 27.78,
+        "mean_ms": 17.66,
+        "stdev_ms": 2.43
       }
     },
     "sudo": {
       "true": {
         "runs": 200,
-        "p50_ms": 2.64,
-        "p95_ms": 3.74,
-        "p99_ms": 4.57,
-        "mean_ms": 2.8,
-        "stdev_ms": 0.46
+        "p50_ms": 2.59,
+        "p95_ms": 3.26,
+        "p99_ms": 3.42,
+        "mean_ms": 2.68,
+        "stdev_ms": 0.25
       },
       "python": {
         "runs": 200,
         "p50_ms": 2.6,
-        "p95_ms": 3.19,
-        "p99_ms": 3.86,
-        "mean_ms": 2.7,
-        "stdev_ms": 0.41
+        "p95_ms": 3.43,
+        "p99_ms": 5.24,
+        "mean_ms": 2.76,
+        "stdev_ms": 0.47
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 2.66,
-        "p95_ms": 3.84,
-        "p99_ms": 8.51,
-        "mean_ms": 2.91,
-        "stdev_ms": 0.92
+        "p50_ms": 2.6,
+        "p95_ms": 3.99,
+        "p99_ms": 5.27,
+        "mean_ms": 2.81,
+        "stdev_ms": 0.79
       }
     },
     "convergence-api": {
       "true": {
         "runs": 200,
-        "p50_ms": 7.89,
-        "p95_ms": 10.62,
-        "p99_ms": 13.1,
-        "mean_ms": 8.32,
-        "stdev_ms": 1.19
+        "p50_ms": 8.66,
+        "p95_ms": 11.26,
+        "p99_ms": 18.32,
+        "mean_ms": 9.26,
+        "stdev_ms": 2.92
       },
       "python": {
         "runs": 200,
-        "p50_ms": 16.41,
-        "p95_ms": 21.06,
-        "p99_ms": 23.54,
-        "mean_ms": 17.18,
-        "stdev_ms": 2.05
+        "p50_ms": 20.4,
+        "p95_ms": 61.47,
+        "p99_ms": 72.16,
+        "mean_ms": 32.5,
+        "stdev_ms": 26.87
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 26.83,
-        "p95_ms": 32.78,
-        "p99_ms": 38.57,
-        "mean_ms": 27.56,
-        "stdev_ms": 2.89
+        "p50_ms": 26.95,
+        "p95_ms": 78.61,
+        "p99_ms": 108.31,
+        "mean_ms": 32.44,
+        "stdev_ms": 17.39
       }
     },
     "convergence-api-trace": {
       "true": {
         "runs": 200,
-        "p50_ms": 23.09,
-        "p95_ms": 26.58,
-        "p99_ms": 29.93,
-        "mean_ms": 23.44,
-        "stdev_ms": 1.94
+        "p50_ms": 23.28,
+        "p95_ms": 25.59,
+        "p99_ms": 28.54,
+        "mean_ms": 23.5,
+        "stdev_ms": 1.77
       },
       "python": {
         "runs": 200,
-        "p50_ms": 67.03,
-        "p95_ms": 74.55,
-        "p99_ms": 101.81,
-        "mean_ms": 67.98,
-        "stdev_ms": 12.73
+        "p50_ms": 68.44,
+        "p95_ms": 104.56,
+        "p99_ms": 153.68,
+        "mean_ms": 74.18,
+        "stdev_ms": 25.97
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 82.47,
-        "p95_ms": 92.23,
-        "p99_ms": 108.52,
-        "mean_ms": 83.68,
-        "stdev_ms": 5.88
+        "p50_ms": 84.95,
+        "p95_ms": 94.07,
+        "p99_ms": 111.47,
+        "mean_ms": 85.55,
+        "stdev_ms": 6.6
       }
     },
     "convergence-mcp": {
       "true": {
         "runs": 200,
-        "p50_ms": 8.64,
-        "p95_ms": 11.03,
-        "p99_ms": 18.31,
-        "mean_ms": 9.34,
-        "stdev_ms": 3.84
+        "p50_ms": 10.07,
+        "p95_ms": 13.96,
+        "p99_ms": 17.41,
+        "mean_ms": 10.58,
+        "stdev_ms": 1.66
       },
       "python": {
         "runs": 200,
-        "p50_ms": 16.84,
-        "p95_ms": 20.41,
-        "p99_ms": 24.45,
-        "mean_ms": 17.45,
-        "stdev_ms": 1.61
+        "p50_ms": 18.38,
+        "p95_ms": 23.48,
+        "p99_ms": 28.48,
+        "mean_ms": 19.23,
+        "stdev_ms": 2.09
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 26.6,
-        "p95_ms": 34.02,
-        "p99_ms": 79.02,
-        "mean_ms": 29.15,
-        "stdev_ms": 13.4
+        "p50_ms": 28.53,
+        "p95_ms": 41.1,
+        "p99_ms": 58.63,
+        "mean_ms": 30.99,
+        "stdev_ms": 10.16
       }
     },
     "convergence-cli": {
       "true": {
         "runs": 200,
-        "p50_ms": 114.37,
-        "p95_ms": 127.58,
-        "p99_ms": 136.09,
-        "mean_ms": 116.5,
-        "stdev_ms": 5.48
+        "p50_ms": 119.65,
+        "p95_ms": 136.88,
+        "p99_ms": 190.08,
+        "mean_ms": 123.17,
+        "stdev_ms": 12.3
       },
       "python": {
         "runs": 200,
-        "p50_ms": 122.65,
-        "p95_ms": 135.06,
-        "p99_ms": 149.31,
-        "mean_ms": 125.59,
-        "stdev_ms": 10.54
+        "p50_ms": 128.58,
+        "p95_ms": 147.85,
+        "p99_ms": 159.44,
+        "mean_ms": 131.47,
+        "stdev_ms": 7.95
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 132.79,
-        "p95_ms": 147.29,
-        "p99_ms": 157.8,
-        "mean_ms": 135.09,
-        "stdev_ms": 6.52
+        "p50_ms": 139.1,
+        "p95_ms": 177.02,
+        "p99_ms": 223.07,
+        "mean_ms": 146.37,
+        "stdev_ms": 20.08
       }
     },
     "bwrap": {
@@ -193,53 +193,53 @@
     "docker-warm": {
       "true": {
         "runs": 200,
-        "p50_ms": 106.64,
-        "p95_ms": 139.13,
-        "p99_ms": 191.95,
-        "mean_ms": 110.4,
-        "stdev_ms": 17.14
+        "p50_ms": 115.55,
+        "p95_ms": 200.73,
+        "p99_ms": 235.1,
+        "mean_ms": 128.51,
+        "stdev_ms": 36.05
       },
       "python": {
         "runs": 200,
-        "p50_ms": 116.17,
-        "p95_ms": 139.36,
-        "p99_ms": 161.9,
-        "mean_ms": 119.44,
-        "stdev_ms": 13.06
+        "p50_ms": 124.23,
+        "p95_ms": 159.5,
+        "p99_ms": 237.56,
+        "mean_ms": 129.99,
+        "stdev_ms": 23.98
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 138.15,
-        "p95_ms": 171.59,
-        "p99_ms": 192.88,
-        "mean_ms": 143.67,
-        "stdev_ms": 15.89
+        "p50_ms": 170.89,
+        "p95_ms": 275.27,
+        "p99_ms": 576.98,
+        "mean_ms": 188.14,
+        "stdev_ms": 77.64
       }
     },
     "docker-cold": {
       "true": {
         "runs": 200,
-        "p50_ms": 151.08,
-        "p95_ms": 200.74,
-        "p99_ms": 264.58,
-        "mean_ms": 158.2,
-        "stdev_ms": 35.39
+        "p50_ms": 217.97,
+        "p95_ms": 466.63,
+        "p99_ms": 660.31,
+        "mean_ms": 257.12,
+        "stdev_ms": 116.12
       },
       "python": {
         "runs": 200,
-        "p50_ms": 161.39,
-        "p95_ms": 193.82,
-        "p99_ms": 222.23,
-        "mean_ms": 165.22,
-        "stdev_ms": 20.27
+        "p50_ms": 284.86,
+        "p95_ms": 829.34,
+        "p99_ms": 1321.99,
+        "mean_ms": 369.34,
+        "stdev_ms": 232.96
       },
       "wordcount": {
         "runs": 200,
-        "p50_ms": 195.47,
-        "p95_ms": 348.86,
-        "p99_ms": 773.57,
-        "mean_ms": 231.29,
-        "stdev_ms": 170.33
+        "p50_ms": 208.95,
+        "p95_ms": 381.71,
+        "p99_ms": 582.46,
+        "mean_ms": 239.26,
+        "stdev_ms": 80.74
       }
     }
   }
